@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "starter_007"
+card_name = "Talia"
+description = "A windswept ranger who snipes the enemy's weakest link."
+faction = "Ember Order"
+element = "Wind"
+role = "DPS"
+rarity = "Epic"
+modifier = "Normal"
+attack = 101
+defense = 39
+health = 527
+speed = 11
+basic_ability = "Piercing Shot"
+passive_ability = "Eagle Eye"
+ultimate_ability = "Storm Volley"
+sell_value = 640
+basic_target_mode = "backline"
+ultimate_target_mode = "active"

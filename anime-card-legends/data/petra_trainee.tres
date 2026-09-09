@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "pool_common_002"
+card_name = "Petra"
+description = "A shield trainee who hasn't lost her footing yet."
+faction = "Ember Order"
+element = "Earth"
+role = "Tank"
+rarity = "Common"
+modifier = "Normal"
+attack = 8
+defense = 16
+health = 162
+speed = 5
+basic_ability = "Brace"
+passive_ability = "Steady Stance"
+ultimate_ability = "Hold the Line"
+sell_value = 10

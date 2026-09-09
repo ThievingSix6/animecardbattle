@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "starter_003"
+card_name = "Mira"
+description = "A silent blade who strikes before her enemies can react."
+faction = "Ember Order"
+element = "Dark"
+role = "Assassin"
+rarity = "Rare"
+modifier = "Normal"
+attack = 61
+defense = 15
+health = 231
+speed = 14
+basic_ability = "Shadow Strike"
+passive_ability = "Killing Intent"
+ultimate_ability = "Thousand Cuts"
+sell_value = 160
+basic_target_mode = "backline"
+ultimate_target_mode = "aoe"

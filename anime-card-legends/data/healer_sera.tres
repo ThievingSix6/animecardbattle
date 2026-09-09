@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "starter_004"
+card_name = "Sera"
+description = "A gentle healer whose light mends even the deepest wounds."
+faction = "Ember Order"
+element = "Light"
+role = "Healer"
+rarity = "Rare"
+modifier = "Normal"
+attack = 29
+defense = 26
+health = 339
+speed = 11
+basic_ability = "Healing Wave"
+passive_ability = "Dawn's Blessing"
+ultimate_ability = "Radiant Rebirth"
+sell_value = 160

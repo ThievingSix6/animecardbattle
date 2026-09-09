@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "starter_002"
+card_name = "Boren"
+description = "An unshakable guardian who shields his allies from harm."
+faction = "Ember Order"
+element = "Earth"
+role = "Tank"
+rarity = "Rare"
+modifier = "Normal"
+attack = 27
+defense = 52
+health = 523
+speed = 7
+basic_ability = "Shield Bash"
+passive_ability = "Unbreakable Wall"
+ultimate_ability = "Fortress Stand"
+sell_value = 160
+passive_type = "guardian_block_heal"
+passive_chance = 0.2
+passive_value = 0.2

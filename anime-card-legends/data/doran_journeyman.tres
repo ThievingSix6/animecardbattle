@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://fea8wn4kaox5" path="res://scripts/models/card_data.gd" id="1_1qq3o"]
+
+[resource]
+script = ExtResource("1_1qq3o")
+card_id = "pool_uncommon_001"
+card_name = "Doran"
+description = "A traveling bard whose tunes steady his allies' nerves."
+faction = "Ember Order"
+element = "Wind"
+role = "Support"
+rarity = "Uncommon"
+modifier = "Normal"
+attack = 20
+defense = 15
+health = 171
+speed = 10
+basic_ability = "Encouraging Verse"
+passive_ability = "Steadfast Tune"
+ultimate_ability = "Ballad of Courage"
+sell_value = 40

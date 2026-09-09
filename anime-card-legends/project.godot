@@ -1,0 +1,31 @@
+; Engine configuration file.
+; Generated/maintained for Anime Card Legends.
+
+config_version=5
+
+[application]
+
+config/name="Anime Card Legends"
+run/main_scene="res://scenes/SaveSlots.tscn"
+config/features=PackedStringArray("4.5", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+EventBus="*res://scripts/core/event_bus.gd"
+UITheme="*res://scripts/ui/theme_installer.gd"
+GameState="*res://scripts/game_state.gd"
+Audio="*res://scripts/core/audio.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
