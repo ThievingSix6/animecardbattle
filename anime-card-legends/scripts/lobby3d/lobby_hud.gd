@@ -2,9 +2,14 @@ class_name LobbyHUD
 extends CanvasLayer
 
 # =========================================================
-# 2D overlay for the 3D lobby: title, controls, live currency,
-# and the interaction prompt.
+# 2D overlay for any 3D world: title, controls, live currency, and the
+# interaction prompt. The hub and the campaign zones share it - the
+# caller sets the labels and the back destination before adding it.
 # =========================================================
+
+var title_text := "Lobby"
+var subtitle_text := ""
+var back_route := Routes.MAIN
 
 var _prompt_panel: PanelContainer
 var _prompt_label: Label
@@ -40,12 +45,16 @@ func _build() -> void:
 	top.offset_top = Design.S4
 	root.add_child(top)
 
-	var back := UI.button("← Menu", _leave, Vector2(120, 44))
+	var back := UI.button("← Back", _leave, Vector2(120, 44))
 	top.add_child(back)
 
-	var title := UI.title("Lobby")
+	var heading := UI.vbox(0)
+	var title := UI.title(title_text)
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	top.add_child(title)
+	heading.add_child(title)
+	if subtitle_text != "":
+		heading.add_child(UI.caption(subtitle_text))
+	top.add_child(heading)
 
 	top.add_child(UI.spacer())
 
@@ -78,8 +87,8 @@ func _build() -> void:
 	_prompt_panel.add_child(_prompt_label)
 
 
-func show_prompt(place: String) -> void:
-	_prompt_label.text = "Press ENTER to visit " + place
+func show_prompt(message: String) -> void:
+	_prompt_label.text = message
 	_prompt_panel.visible = true
 
 
@@ -97,4 +106,4 @@ func _refresh_currency() -> void:
 
 func _leave() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	get_tree().change_scene_to_file(Routes.MAIN)
+	get_tree().change_scene_to_file(back_route)

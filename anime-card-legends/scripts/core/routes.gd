@@ -15,6 +15,8 @@ const TEAM     := "res://scenes/TeamBuilder.tscn"
 const CHARACTER := "res://scenes/Character.tscn"
 const TALENTS  := "res://scenes/Talents.tscn"
 const TOWER    := "res://scenes/Tower.tscn"
+const CAMPAIGN := "res://scenes/Campaign.tscn"
+const ZONE     := "res://scenes/Zone.tscn"
 const BATTLE   := "res://scenes/Battle.tscn"
 
 

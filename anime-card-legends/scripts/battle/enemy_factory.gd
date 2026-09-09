@@ -2,27 +2,19 @@ class_name EnemyFactory
 extends RefCounted
 
 # =========================================================
-# Builds the opposing team for a tower floor. Separated from both
-# the simulation and the view so encounter design can evolve on its own.
+# Builds the opposing team for a floor. Separated from both the
+# simulation and the view so encounter design can evolve on its own.
+#
+# Enemy identity comes from the campaign zone that owns the floor, so a
+# zone's roster is declared in exactly one place (scripts/core/campaign.gd)
+# and the 3D world, the zone select, and the fight always agree.
 # =========================================================
-
-const TIERS: Array[Dictionary] = [
-	{"upto": 9,   "element": "",      "boss": "Golem Warlord", "names": ["Training Golem", "Rusted Automaton", "Stone Sentinel"], "roles": ["Tank", "DPS"]},
-	{"upto": 19,  "element": "Earth", "boss": "Alpha Direwolf", "names": ["Feral Wolf", "Bandit Scout", "Marsh Lurker"], "roles": ["DPS", "Assassin", "Support"]},
-	{"upto": 29,  "element": "Dark",  "boss": "The Bandit Kingpin", "names": ["Bandit Raider", "Rogue Mercenary", "Cutthroat"], "roles": ["DPS", "Assassin", "Tank"]},
-	{"upto": 39,  "element": "Dark",  "boss": "High Cultist Mordrai", "names": ["Dark Cultist", "Shadow Acolyte", "Void Priest"], "roles": ["DPS", "Healer", "Support"]},
-	{"upto": 49,  "element": "Light", "boss": "The Ancient Titan", "names": ["Ancient Guardian", "Fallen Knight", "Wraith Sentinel"], "roles": ["Tank", "DPS", "Assassin"]},
-	{"upto": 9999,"element": "Dark",  "boss": "The Tower's Heart", "names": ["Tower Wraith", "Voidbound Horror", "Nameless Sentinel"], "roles": ["Tank", "DPS", "Assassin"]},
-]
 
 const BASE := {"attack": 18.0, "defense": 20.0, "health": 200.0, "speed": 8.0}
 
 
 static func tier_for(floor_number: int) -> Dictionary:
-	for tier in TIERS:
-		if floor_number <= tier["upto"]:
-			return tier
-	return TIERS[-1]
+	return Campaign.zone_for_floor(floor_number)
 
 
 static func build_floor(floor_number: int, progression: ProgressionSystem) -> Array[CardData]:

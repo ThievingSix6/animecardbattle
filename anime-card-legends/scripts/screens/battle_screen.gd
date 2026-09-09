@@ -16,10 +16,13 @@ var _result_layer: Control
 
 
 func screen_title() -> String:
-	return "Floor %d" % floor_number
+	return "%s — %s" % [
+		Campaign.zone_name_for_floor(floor_number),
+		Campaign.stage_label(floor_number),
+	]
 
 func back_route() -> String:
-	return Routes.TOWER
+	return Routes.ZONE
 
 func shows_weather() -> bool:
 	return false
@@ -27,6 +30,9 @@ func shows_weather() -> bool:
 
 func build_content() -> void:
 	floor_number = GameState.progression.pending_floor
+	# Keep the zone in step with the floor, so leaving the fight returns to
+	# the zone this floor actually belongs to however the player got here.
+	GameState.progression.pending_zone = Campaign.zone_index_for_floor(floor_number)
 	Audio.play_music("music_battle")
 
 	content.add_child(UI.section("Enemy"))
@@ -80,8 +86,8 @@ func _start() -> void:
 	sim.actives_changed.connect(_on_actives_changed)
 	sim.battle_ended.connect(_on_ended)
 
-	_write("[center][color=#%s]FLOOR %d — BEGIN[/color][/center]" % [
-		Design.ACCENT.to_html(false), floor_number])
+	_write("[center][color=#%s]%s — BEGIN[/color][/center]" % [
+		Design.ACCENT.to_html(false), screen_title().to_upper()])
 
 	await get_tree().create_timer(0.7).timeout
 	_run()
@@ -250,5 +256,5 @@ func _show_result(player_won: bool, rewards: Dictionary) -> void:
 			get_tree().reload_current_scene()
 		, Vector2(150, 48)))
 
-	actions.add_child(UI.button("Tower", func(): Routes.go(self, Routes.TOWER), Vector2(150, 48)))
+	actions.add_child(UI.button("Zone map", func(): Routes.go(self, Routes.ZONE), Vector2(150, 48)))
 	body.add_child(actions)

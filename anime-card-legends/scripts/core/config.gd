@@ -70,9 +70,11 @@ const ROLL_INTERVAL_MIN := 0.4
 const ROLL_INTERVAL_PER_LEVEL := 0.13
 const LUCK_PER_LEVEL := 0.02
 
-# ---------------- TOWER ----------------
-const MAX_FLOOR := 50
-const BOSS_EVERY := 5
+# ---------------- TOWER / CAMPAIGN ----------------
+# Six zones of seven stages. BOSS_EVERY matches Campaign.STAGES_PER_ZONE,
+# which is what makes the last stage of every zone a boss fight.
+const MAX_FLOOR := 42
+const BOSS_EVERY := 7
 const FLOOR_STAT_SCALE := 0.12
 const BOSS_STAT_MULT := 1.6
 const FLOOR_GEM_BASE := 20
