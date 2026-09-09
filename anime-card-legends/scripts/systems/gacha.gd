@@ -27,10 +27,9 @@ func _build_pool() -> void:
 	for r in Config.RARITY_ORDER:
 		pool[r] = []
 
-	for path in Config.POOL_CARDS:
-		if not ResourceLoader.exists(path):
-			continue
-		var template: CardData = load(path)
+	# The starting roster is always pullable, so duplicates of it can be
+	# merged like any other card.
+	for template in CardGenerator.build_starters():
 		_add_to_pool(template)
 
 	# Cards derived from the player's own artwork take priority.

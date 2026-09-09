@@ -120,33 +120,16 @@ const ORIGIN_LABELS := {
 	"lord": "Lords", "anime": "Anime", "primordial": "Primordial",
 }
 
-# ---------------- CONTENT PATHS ----------------
-const STARTER_CARDS: Array[String] = [
-	"res://data/starter_warrior.tres",
-	"res://data/tank_boren.tres",
-	"res://data/assassin_mira.tres",
-	"res://data/healer_sera.tres",
-	"res://data/support_wynn.tres",
-]
-
-const POOL_CARDS: Array[String] = [
-	"res://data/finn_novice.tres",
-	"res://data/petra_trainee.tres",
-	"res://data/doran_journeyman.tres",
-	"res://data/starter_warrior.tres",
-	"res://data/tank_boren.tres",
-	"res://data/assassin_mira.tres",
-	"res://data/healer_sera.tres",
-	"res://data/support_wynn.tres",
-	"res://data/mage_ryo.tres",
-	"res://data/ranger_talia.tres",
-	"res://data/legendary_vaelith.tres",
-	"res://data/mythic_ashen_sovereign.tres",
-	"res://data/secret_nameless_one.tres",
-	"res://data/secret_genesis.tres",
-	"res://data/boss_ignis.tres",
-	"res://data/boss_thessaly.tres",
-	"res://data/boss_grimhollow.tres",
+# ---------------- STARTING ROSTER ----------------
+# Declared as plain data rather than resource files: stats are derived
+# from the rarity/role curves above, so a starter can never drift out of
+# balance with the rest of the roster.
+const STARTER_ARCHETYPES: Array[Dictionary] = [
+	{"name": "Vanguard Recruit",    "role": "Tank",     "element": "Earth", "rarity": "Rare"},
+	{"name": "Emberblade Cadet",    "role": "DPS",      "element": "Fire",  "rarity": "Rare"},
+	{"name": "Duskstep Adept",      "role": "Assassin", "element": "Dark",  "rarity": "Rare"},
+	{"name": "Lightwarden Acolyte", "role": "Healer",   "element": "Light", "rarity": "Rare"},
+	{"name": "Galewind Herald",     "role": "Support",  "element": "Wind",  "rarity": "Rare"},
 ]
 
 const GENERATED_CARD_COUNT := 200

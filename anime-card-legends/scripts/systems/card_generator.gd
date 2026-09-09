@@ -97,6 +97,48 @@ const PASSIVE_ODDS := {
 }
 
 
+# The opening hand. Seeded per name so a starter rolls identical stats on
+# every launch and across save files.
+static func build_starters() -> Array[CardData]:
+	var out: Array[CardData] = []
+	for archetype in Config.STARTER_ARCHETYPES:
+		var name_text := str(archetype["name"])
+		var role := str(archetype["role"])
+		var rarity := str(archetype["rarity"])
+
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("starter:" + name_text)
+
+		var card := CardData.new()
+		card.card_id = "starter_" + name_text.to_lower().replace(" ", "_")
+		card.card_name = name_text
+		card.role = role
+		card.rarity = rarity
+		card.element = str(archetype["element"])
+		card.modifier = "Normal"
+		card.origin_tag = "starter"
+		card.faction = Config.FACTIONS[rng.randi() % Config.FACTIONS.size()]
+		card.description = DESCRIPTIONS[rng.randi() % DESCRIPTIONS.size()]
+		card.sell_value = Config.sell_value_for_rarity(rarity)
+
+		var base := Config.stats_for_rarity(rarity)
+		var shape: Dictionary = Config.ROLE_STATS[role]
+		card.attack  = max(5,  int(rng.randf_range(base["attack"][0],  base["attack"][1])  * shape["attack"]))
+		card.defense = max(3,  int(rng.randf_range(base["defense"][0], base["defense"][1]) * shape["defense"]))
+		card.health  = max(60, int(rng.randf_range(base["health"][0],  base["health"][1])  * shape["health"]))
+		card.speed   = max(4,  int(rng.randf_range(base["speed"][0],   base["speed"][1])   * shape["speed"]))
+
+		var options: Dictionary = ABILITIES.get(role, ABILITIES["DPS"])
+		card.basic_ability = options["basic"][rng.randi() % options["basic"].size()]
+		card.ultimate_ability = options["ult"][rng.randi() % options["ult"].size()]
+		card.passive_ability = PASSIVE_NAMES[rng.randi() % PASSIVE_NAMES.size()]
+		card.basic_target_mode = "active"
+		card.ultimate_target_mode = "active"
+
+		out.append(card)
+	return out
+
+
 static func generate_batch(count: int, used_names: Dictionary) -> Array[CardData]:
 	var results: Array[CardData] = []
 	var attempts := 0

@@ -97,10 +97,8 @@ func _process(delta: float) -> void:
 
 func _grant_starting_cards() -> void:
 	var ids: Array[String] = []
-	for path in Config.STARTER_CARDS:
-		if not ResourceLoader.exists(path):
-			continue
-		var card := collection.add(load(path))
+	for template in CardGenerator.build_starters():
+		var card := collection.add(template)
 		if card and ids.size() < CollectionSystem.TEAM_SIZE:
 			ids.append(card.card_id)
 	collection.set_team(ids)
