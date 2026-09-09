@@ -305,88 +305,370 @@ main {
 
 /* ---------------- BATTLE ---------------- */
 
-.battle-side { display: flex; gap: var(--s3); justify-content: center; flex-wrap: wrap; }
-
-.fighter {
-  width: 128px;
-  background: var(--surface);
-  border: 2px solid var(--hairline);
-  border-radius: var(--r-md);
-  padding: var(--s2);
-  position: relative;
-  transition: transform var(--t-fast), opacity var(--t-base), border-color var(--t-fast);
+.battle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  min-height: 100%;
 }
 
-.fighter.active { border-color: var(--accent); box-shadow: 0 0 18px rgba(245, 166, 35, 0.28); }
-.fighter.dead { opacity: 0.22; filter: grayscale(1); transform: scale(0.94); }
-.fighter.hit { animation: shake var(--t-base) ease-out; }
+.battle-top { display: flex; align-items: center; gap: var(--s3); }
+
+.turn-counter {
+  font-size: var(--fs-title);
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 22px rgba(245, 166, 35, 0.35);
+  white-space: nowrap;
+}
+
+.floor-chip {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  padding-left: var(--s2);
+  border-left: 2px solid var(--accent);
+}
+
+.floor-chip b { font-size: var(--fs-body); }
+.floor-chip span {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.pill {
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  padding: var(--s2) var(--s4);
+  cursor: pointer;
+  transition: background var(--t-fast), transform var(--t-fast);
+  white-space: nowrap;
+}
+
+.pill:hover { background: var(--surface-3); }
+.pill:active { transform: translateY(1px); }
+
+.speed-pill { background: #1d6b46; border-color: #2f8f61; color: #d6ffe9; min-width: 62px; }
+.speed-pill:hover { background: #248055; }
+.forfeit-pill { background: #a32020; border-color: #c8302f; color: #ffe4e4; }
+.forfeit-pill:hover { background: #bd2626; }
+.ghost-pill { background: transparent; color: var(--text-dim); }
+
+/* --- arena --- */
+
+/* The conditions panel gets its own column rather than floating, so it can
+   never sit on top of the enemy card. */
+.arena {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) 232px;
+  gap: var(--s4);
+  align-items: start;
+}
+
+.arena-side { display: flex; flex-direction: column; gap: var(--s3); min-width: 0; }
+.arena-mid { display: grid; place-items: center; padding-top: 150px; }
+
+.vs-mark {
+  font-size: var(--fs-heading);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.side-label {
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.side-player { color: var(--info); }
+.side-enemy { color: var(--danger); text-align: right; }
+
+/* Cards size to their own content; the slot reserves height so the layout
+   does not jump when a fallen card is replaced. */
+.duel-slot { display: flex; justify-content: center; align-items: flex-start; min-height: 424px; }
+
+/* --- duelist card --- */
+
+.duel-card {
+  position: relative;
+  width: 100%;
+  max-width: 340px;
+  border-radius: var(--r-lg);
+  border: 2px solid var(--edge, var(--hairline));
+  background:
+    linear-gradient(180deg, rgba(11, 13, 20, 0.15) 0%, rgba(11, 13, 20, 0.92) 62%),
+    radial-gradient(120% 80% at 50% 0%, var(--el, #262c3d) 0%, #10141f 68%);
+  padding: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  overflow: hidden;
+  box-shadow: 0 0 26px -6px var(--edge, transparent), 0 14px 34px rgba(0, 0, 0, 0.55);
+  animation: cardin var(--t-base) ease-out;
+}
+
+@keyframes cardin {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.duel-card.hit { animation: shake var(--t-base) ease-out; }
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5px); }
-  75% { transform: translateX(5px); }
+  25% { transform: translateX(-7px); }
+  75% { transform: translateX(7px); }
 }
 
-.fighter .fname {
+.dc-head { display: flex; align-items: center; justify-content: space-between; }
+
+.dc-rarity {
+  font-size: var(--fs-micro);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 1px var(--s2);
+  background: rgba(11, 13, 20, 0.55);
+}
+
+.dc-dex { font-size: var(--fs-micro); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.dc-name {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.15;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.dc-pips { display: flex; gap: var(--s1); flex-wrap: wrap; }
+
+.pip {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--pip) 30%, #0b0d14);
+  border: 1px solid var(--pip);
+  cursor: help;
+}
+
+/* Stands in for the character art the finished game will render here. */
+.dc-art {
+  position: relative;
+  flex: 0 0 128px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  background: radial-gradient(70% 70% at 50% 45%, color-mix(in srgb, var(--el) 34%, transparent), transparent 72%);
+}
+
+.dc-sigil {
+  font-size: 62px;
+  opacity: 0.85;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.7));
+}
+
+.dc-role {
+  position: absolute;
+  bottom: 2px;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.dc-ability {
+  background: rgba(8, 10, 16, 0.78);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  padding: var(--s2) var(--s3);
+}
+
+.dc-ability-name {
+  display: block;
+  font-size: var(--fs-heading);
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.dc-ability p { margin: 0; font-size: var(--fs-small); color: var(--text-dim); line-height: 1.45; }
+.dc-passive { margin-top: var(--s2) !important; color: var(--success) !important; }
+
+.dc-tags { display: flex; gap: var(--s1); flex-wrap: wrap; min-height: 20px; }
+
+.dc-tag {
   font-size: var(--fs-micro);
   font-weight: 700;
-  line-height: 1.2;
-  min-height: 2.4em;
-  overflow: hidden;
-}
-
-.fighter .frole { font-size: var(--fs-micro); color: var(--text-dim); }
-
-.bar {
-  height: 7px;
-  background: var(--surface-3);
+  letter-spacing: 0.06em;
+  border: 1px solid var(--hairline);
   border-radius: 999px;
-  overflow: hidden;
-  margin-top: var(--s1);
+  padding: 1px var(--s2);
+  color: var(--text-dim);
+  background: rgba(11, 13, 20, 0.6);
 }
 
-.bar > i {
+.dc-energy {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.dc-energy > i {
   display: block;
   height: 100%;
-  background: var(--success);
+  background: var(--energy);
   transition: width var(--t-base) ease-out;
 }
 
-.bar.low > i { background: var(--danger); }
-.bar.energy > i { background: var(--energy); }
-.bar.energy { height: 4px; }
-
-.hpnum {
-  font-size: var(--fs-micro);
-  color: var(--text-dim);
+.dc-foot {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: var(--fs-small);
   font-variant-numeric: tabular-nums;
-  margin-top: 2px;
 }
+
+.dc-dmg { color: var(--danger); }
+.dc-def { color: var(--text-muted); }
+.dc-hp { color: var(--success); }
+
+/* --- team bar --- */
+
+.team-bar {
+  position: relative;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
+}
+
+.team-bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2f9e63, var(--success));
+  transition: width var(--t-base) ease-out;
+}
+
+.team-bar.low > i { background: linear-gradient(90deg, #a32020, var(--danger)); }
+
+.tb-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px #000;
+}
+
+/* --- challenges --- */
+
+.challenges {
+  background: rgba(20, 24, 36, 0.9);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: var(--s3);
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.challenges-head {
+  font-size: var(--fs-small);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--info);
+  margin-bottom: var(--s2);
+}
+
+.challenge-list { margin: 0; padding-left: var(--s4); }
+.challenge-list li { font-size: var(--fs-small); color: var(--text-dim); line-height: 1.5; margin-bottom: var(--s1); }
+
+/* --- benches --- */
+
+.benches { display: flex; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
+.bench { display: flex; gap: var(--s2); }
+.bench-right { justify-content: flex-end; }
+
+.bench-tile {
+  position: relative;
+  width: 62px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--edge, var(--hairline));
+  background: linear-gradient(180deg, var(--el, #262c3d) -30%, #10141f 70%);
+  padding: var(--s2) var(--s1);
+  text-align: center;
+  transition: opacity var(--t-base), transform var(--t-fast), box-shadow var(--t-fast);
+}
+
+.bench-tile.active { box-shadow: 0 0 0 2px var(--accent); transform: translateY(-3px); }
+.bench-tile.dead { opacity: 0.28; filter: grayscale(1); }
+.bt-sigil { font-size: 19px; }
+
+.bt-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+  margin: var(--s1) 0 2px;
+}
+
+.bt-bar > i { display: block; height: 100%; background: var(--success); transition: width var(--t-base); }
+.bt-bar.low > i { background: var(--danger); }
+.bt-hp { font-size: var(--fs-micro); color: var(--text-dim); font-variant-numeric: tabular-nums; }
 
 .floater {
   position: absolute;
   left: 50%;
-  top: 30%;
+  top: 26%;
   transform: translateX(-50%);
   font-weight: 800;
-  font-size: var(--fs-heading);
+  font-size: var(--fs-title);
   pointer-events: none;
   animation: rise 0.9s ease-out forwards;
-  text-shadow: 0 2px 4px #000;
+  text-shadow: 0 2px 6px #000;
+  z-index: 4;
 }
 
 @keyframes rise {
   0% { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -38px); }
+  100% { opacity: 0; transform: translate(-50%, -46px); }
 }
 
-.vs {
-  text-align: center;
-  color: var(--accent);
-  font-size: var(--fs-heading);
-  font-weight: 800;
-  letter-spacing: 0.3em;
-  margin: var(--s4) 0;
+.result-sub { color: var(--text-dim); font-size: var(--fs-small); margin-bottom: var(--s3); }
+
+@media (max-width: 1100px) {
+  .arena { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+  .challenges { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .arena { grid-template-columns: 1fr; }
+  .arena-mid { padding-top: 0; }
+  .duel-slot { min-height: 0; }
+  .side-enemy { text-align: left; }
+  .bench-right { justify-content: flex-start; }
 }
 
 .log {
