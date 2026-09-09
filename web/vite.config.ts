@@ -7,5 +7,4 @@ export default defineConfig({
   base: "./",
   plugins: [viteSingleFile()],
   build: { target: "es2020", assetsInlineLimit: 100_000_000, cssCodeSplit: false },
-  server: { open: true },
 });
