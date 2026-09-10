@@ -117,6 +117,8 @@ static func build_starters() -> Array[CardData]:
 		card.skill_id = Skills.pick_for(role, rarity, rng)
 		card.basic_target_mode = "active"
 		card.ultimate_target_mode = "active"
+		card.banner_id = Banners.banner_for(card.element, role)
+		Leveling.apply(card)
 
 		out.append(card)
 	return out
@@ -160,6 +162,8 @@ static func generate_one(used_names: Dictionary) -> CardData:
 	_apply_stats(card, rarity, role)
 	_apply_abilities(card, role)
 	_apply_targeting(card, role)
+	card.banner_id = Banners.banner_for(card.element, role)
+	Leveling.apply(card)
 	return card
 
 

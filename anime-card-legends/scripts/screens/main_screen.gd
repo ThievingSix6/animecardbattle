@@ -19,6 +19,9 @@ const MENU: Array[Dictionary] = [
 func screen_title() -> String: return "Anime Card Legends"
 func back_route() -> String: return ""
 
+# The menu grid is sized to fill the window rather than scroll.
+func scrolls_content() -> bool: return false
+
 
 func build_content() -> void:
 	Audio.play_music("music_menu")

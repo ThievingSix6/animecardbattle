@@ -6,6 +6,10 @@ var _sort_key := "rarity"
 
 
 func screen_title() -> String: return "Collection"
+# This screen scrolls its own list region, so the base page scroll
+# would just nest one scroll inside another.
+func scrolls_content() -> bool: return false
+
 
 
 func build_content() -> void:
@@ -30,7 +34,8 @@ func build_content() -> void:
 	content.add_child(toolbar)
 
 	var scroll := UI.scroll()
-	_grid = UI.grid(5, Design.S3)
+	# Wide gutters so the higher rarities' glow has somewhere to go.
+	_grid = UI.grid(5, Design.S6)
 	scroll.add_child(_grid)
 	content.add_child(scroll)
 

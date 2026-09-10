@@ -9,6 +9,11 @@ extends RefCounted
 var pool: Dictionary = {}          # rarity -> Array[CardData] templates
 var boss_pool_unlocked := false
 
+# Pulls since the last Epic+ / Legendary+, tracked per banner. Chasing a
+# banner is progress toward that banner, and switching away does not
+# throw the progress out.
+var pity: Dictionary = {}          # banner_id -> {"epic": int, "legendary": int}
+
 var _collection: CollectionSystem
 var _luck_provider: Callable       # () -> float, supplied by GameState
 var _element_boost_provider: Callable  # () -> String
@@ -86,23 +91,37 @@ func unlock_boss_pool() -> void:
 
 # ---------------- ODDS ----------------
 
-func roll_rarity(luck: float = 0.0) -> String:
+# `floor_rarity` is the lowest tier the draw may produce - the legends
+# banner uses it to guarantee Epic or better. `at_least` is the pity
+# system forcing a floor for this one pull.
+func roll_rarity(luck: float = 0.0, floor_rarity: String = "Common", at_least: String = "") -> String:
+	var lowest := Config.rarity_index(floor_rarity)
+	if at_least != "":
+		lowest = maxi(lowest, Config.rarity_index(at_least))
+
 	var weights := {}
 	var total := 0.0
 	for r in Config.RARITY_ORDER:
+		if Config.rarity_index(r) < lowest:
+			continue
 		var w: float = Config.RARITY_WEIGHTS[r]
 		if r != "Common":
 			w *= (1.0 + luck)
 		weights[r] = w
 		total += w
 
+	if total <= 0.0:
+		return Config.RARITY_ORDER[lowest]
+
 	var roll := randf() * total
 	var cumulative := 0.0
 	for r in Config.RARITY_ORDER:
+		if not weights.has(r):
+			continue
 		cumulative += weights[r]
 		if roll <= cumulative:
 			return r
-	return "Common"
+	return Config.RARITY_ORDER[lowest]
 
 
 # Probability that any single pull lands in this rarity band.
@@ -123,7 +142,7 @@ func card_odds(card: CardData) -> float:
 	for w in Config.RARITY_WEIGHTS.values():
 		total += w
 
-	var bucket := candidates(card.rarity, "")
+	var bucket := candidates(card.rarity, Banners.STANDARD)
 	if bucket.is_empty() or total <= 0.0:
 		return 0.0
 
@@ -134,56 +153,167 @@ func card_odds(card: CardData) -> float:
 
 # ---------------- CANDIDATE SELECTION ----------------
 
-func candidates(rarity: String, origin: String) -> Array:
+# Every card of this rarity the given banner is willing to produce.
+func candidates(rarity: String, banner_id: String) -> Array:
 	var out: Array = []
 	for c in pool.get(rarity, []):
 		if c.locked:
 			continue
-		if origin != "" and c.origin_tag != origin:
+		if banner_id != "" and not Banners.accepts(banner_id, c):
 			continue
 		out.append(c)
 	return out
 
 
-# Applies the active weather element boost by repeating matching cards.
-func weighted_candidates(rarity: String, origin: String) -> Array:
-	var base := candidates(rarity, origin)
-	var boost: String = _element_boost_provider.call()
-	if base.is_empty() or boost == "":
+# The draw bag: the banner's rate-up repeats its own themed cards, and
+# the active weather event repeats cards of the boosted element. A card
+# that is both appears many times over.
+func weighted_candidates(rarity: String, banner_id: String) -> Array:
+	var base := candidates(rarity, banner_id)
+	if base.is_empty():
 		return base
+
+	var boost: String = _element_boost_provider.call()
 
 	var weighted: Array = []
 	for c in base:
-		weighted.append(c)
-		if c.element == boost:
-			for i in Config.EVENT_ELEMENT_WEIGHT - 1:
-				weighted.append(c)
+		var entries := 1
+		if banner_id != "":
+			entries = Banners.entries(banner_id, c)
+		if boost != "" and c.element == boost:
+			entries *= Config.EVENT_ELEMENT_WEIGHT
+		for i in entries:
+			weighted.append(c)
 	return weighted
+
+
+# How many of the banner's own themed cards exist, for the banner panel.
+func featured_cards(banner_id: String) -> Array[CardData]:
+	var out: Array[CardData] = []
+	for c in all_templates():
+		if c.locked:
+			continue
+		if Banners.is_featured(banner_id, c):
+			out.append(c)
+	out.sort_custom(func(a, b):
+		var ra := Config.rarity_index(a.rarity)
+		var rb := Config.rarity_index(b.rarity)
+		if ra != rb:
+			return ra > rb
+		return a.card_name.naturalnocasecmp_to(b.card_name) < 0)
+	return out
+
+
+func banner_pool_size(banner_id: String) -> int:
+	var n := 0
+	for rarity in Config.RARITY_ORDER:
+		n += candidates(rarity, banner_id).size()
+	return n
 
 
 # ---------------- PULLING ----------------
 
-func pull(origin: String = "") -> CardData:
-	var rarity := roll_rarity(_luck_provider.call())
+# ---------------- PITY ----------------
 
-	# Degrade gracefully: banner -> unfiltered -> Common.
-	var options := weighted_candidates(rarity, origin)
-	if options.is_empty():
-		options = weighted_candidates(rarity, "")
-	if options.is_empty():
-		options = weighted_candidates("Common", "")
+func pity_for(banner_id: String) -> Dictionary:
+	if not pity.has(banner_id):
+		pity[banner_id] = {"epic": 0, "legendary": 0}
+	return pity[banner_id]
+
+
+# The rarity this pull is owed, if any counter has run out.
+func _pity_floor(banner_id: String) -> String:
+	var banner := Banners.get_banner(banner_id)
+	var counters := pity_for(banner_id)
+
+	if int(counters["legendary"]) + 1 >= int(banner["pity_legendary"]):
+		return "Legendary"
+	if int(counters["epic"]) + 1 >= int(banner["pity_epic"]):
+		return "Epic"
+	return ""
+
+
+func _record_pull(banner_id: String, rarity: String) -> void:
+	var counters := pity_for(banner_id)
+	var tier := Config.rarity_index(rarity)
+
+	if tier >= Config.rarity_index("Epic"):
+		counters["epic"] = 0
+	else:
+		counters["epic"] = int(counters["epic"]) + 1
+
+	if tier >= Config.rarity_index("Legendary"):
+		counters["legendary"] = 0
+	else:
+		counters["legendary"] = int(counters["legendary"]) + 1
+
+
+# Pulls until the guaranteed tier is reachable, in case a banner has no
+# card at all in the tier the pity system just demanded.
+func pulls_until_legendary(banner_id: String) -> int:
+	var banner := Banners.get_banner(banner_id)
+	return maxi(0, int(banner["pity_legendary"]) - int(pity_for(banner_id)["legendary"]))
+
+
+# ---------------- PULLING ----------------
+
+func pull(banner_id: String = "", forced_rarity: String = "") -> CardData:
+	if banner_id == "":
+		banner_id = Banners.STANDARD
+
+	var owed := _pity_floor(banner_id)
+	var rarity := forced_rarity
+
+	if rarity == "":
+		rarity = roll_rarity(
+			_luck_provider.call(), Banners.floor_rarity(banner_id), owed)
+	elif owed != "" and Config.rarity_index(owed) > Config.rarity_index(rarity):
+		# A caller-imposed floor must never cancel a bigger one the pity
+		# system already owes - the ten-pull's Rare guarantee should not
+		# eat the Legendary that was due on that exact pull.
+		rarity = roll_rarity(
+			_luck_provider.call(), Banners.floor_rarity(banner_id), owed)
+
+	# Degrade gracefully. A banner that owns nothing at the rolled rarity
+	# falls back down the tiers rather than dropping the pull entirely,
+	# so an early roster of a dozen images still summons. It never falls
+	# below the banner's own floor - the legends banner promises Epic and
+	# has to keep that promise even when it is short of cards.
+	var lowest := Config.rarity_index(Banners.floor_rarity(banner_id))
+	var options := weighted_candidates(rarity, banner_id)
+	var tier := Config.rarity_index(rarity)
+	while options.is_empty() and tier > lowest:
+		tier -= 1
+		rarity = Config.RARITY_ORDER[tier]
+		options = weighted_candidates(rarity, banner_id)
 	if options.is_empty():
 		return null
 
+	_record_pull(banner_id, rarity)
 	return _collection.add(options[randi() % options.size()])
 
 
-func pull_many(count: int, origin: String = "") -> Array[CardData]:
+func pull_many(count: int, banner_id: String = "") -> Array[CardData]:
+	if banner_id == "":
+		banner_id = Banners.STANDARD
+
 	var results: Array[CardData] = []
+	var best := -1
+
 	for i in count:
-		var card := pull(origin)
-		if card:
-			results.append(card)
+		# The last card of a ten-pull is floored at Rare if nothing good
+		# has turned up yet, so a full-price ten never comes back as ten
+		# Commons. It replaces that pull rather than adding an eleventh.
+		var forced := ""
+		if count >= 10 and i == count - 1 and best < Config.rarity_index("Rare"):
+			forced = "Rare"
+
+		var card := pull(banner_id, forced)
+		if card == null:
+			continue
+		results.append(card)
+		best = maxi(best, Config.rarity_index(card.rarity))
+
 	return results
 
 
@@ -193,7 +323,10 @@ func pull_many(count: int, origin: String = "") -> Array[CardData]:
 # compute the expected number of hits and sample it; large expectations
 # converge to their mean, small ones use a Poisson draw so rare cards
 # still feel genuinely random.
-func bulk(total_rolls: int, origin: String = "") -> Dictionary:
+func bulk(total_rolls: int, banner_id: String = "") -> Dictionary:
+	if banner_id == "":
+		banner_id = Banners.STANDARD
+
 	var total_weight := 0.0
 	for w in Config.RARITY_WEIGHTS.values():
 		total_weight += w
@@ -202,9 +335,9 @@ func bulk(total_rolls: int, origin: String = "") -> Dictionary:
 	var summary := {}
 
 	for rarity in Config.RARITY_ORDER:
-		var bucket := candidates(rarity, origin)
+		var bucket := candidates(rarity, banner_id)
 		if bucket.is_empty():
-			bucket = candidates(rarity, "")
+			bucket = candidates(rarity, Banners.STANDARD)
 		if bucket.is_empty():
 			continue
 

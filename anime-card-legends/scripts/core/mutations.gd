@@ -115,10 +115,12 @@ static func apply(template: CardData, mutation_id: String) -> CardData:
 	card.modifier = mutation_id
 
 	var mult := multiplier(mutation_id)
-	card.attack = int(round(card.attack * mult))
-	card.defense = int(round(card.defense * mult))
-	card.health = int(round(card.health * mult))
-	card.speed = int(round(card.speed * (1.0 + (mult - 1.0) * 0.25)))
 	card.sell_value = int(round(card.sell_value * mult * 2.0))
+
+	# Scales the level-1 baseline rather than the live stats. Touching the
+	# live stats alone would make the bonus vanish the next time the card
+	# was levelled or reloaded, since those numbers are recomputed from
+	# the baseline every time.
+	Leveling.scale_base(card, mult, 1.0 + (mult - 1.0) * 0.25)
 
 	return card

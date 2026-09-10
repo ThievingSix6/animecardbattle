@@ -42,15 +42,46 @@ const RARITY := {
 	"Awakened":  Color("#ff2d95"),
 }
 
-# Visual weight per rarity: border thickness and aura bloom radius.
+# Visual weight per rarity. Three dials move together so the tiers read
+# apart at a glance: the border gets thicker, the glow reaches further,
+# and the glow gets more opaque. A Common has no glow at all, which is
+# what makes an Epic's glow mean something.
 const RARITY_BORDER := {
 	"Common": 2, "Uncommon": 2, "Rare": 3, "Epic": 4,
 	"Legendary": 5, "Mythic": 6, "Secret": 7, "Awakened": 8,
 }
+# How far the glow spreads past the card edge, in pixels.
 const RARITY_AURA := {
-	"Common": 0, "Uncommon": 4, "Rare": 8, "Epic": 13,
-	"Legendary": 18, "Mythic": 24, "Secret": 30, "Awakened": 38,
+	"Common": 0, "Uncommon": 5, "Rare": 10, "Epic": 16,
+	"Legendary": 22, "Mythic": 28, "Secret": 34, "Awakened": 42,
 }
+# How strongly it burns.
+const RARITY_GLOW := {
+	"Common": 0.0, "Uncommon": 0.35, "Rare": 0.5, "Epic": 0.65,
+	"Legendary": 0.78, "Mythic": 0.88, "Secret": 0.95, "Awakened": 1.0,
+}
+# How far the glow breathes in and out, and how fast.
+const RARITY_PULSE := {
+	"Common": 0, "Uncommon": 2, "Rare": 4, "Epic": 6,
+	"Legendary": 9, "Mythic": 12, "Secret": 15, "Awakened": 20,
+}
+const RARITY_PULSE_SPEED := {
+	"Common": 0.0, "Uncommon": 1.6, "Rare": 1.45, "Epic": 1.3,
+	"Legendary": 1.15, "Mythic": 1.0, "Secret": 0.85, "Awakened": 0.7,
+}
+
+
+static func rarity_aura(rarity: String) -> int:
+	return int(RARITY_AURA.get(rarity, 0))
+
+static func rarity_glow(rarity: String) -> float:
+	return float(RARITY_GLOW.get(rarity, 0.0))
+
+static func rarity_pulse(rarity: String) -> int:
+	return int(RARITY_PULSE.get(rarity, 0))
+
+static func rarity_pulse_speed(rarity: String) -> float:
+	return float(RARITY_PULSE_SPEED.get(rarity, 1.4))
 
 # ---------------- ELEMENTS ----------------
 const ELEMENT := {

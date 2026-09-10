@@ -4,6 +4,10 @@ var _grid: GridContainer
 
 
 func screen_title() -> String: return "Tower"
+# This screen scrolls its own list region, so the base page scroll
+# would just nest one scroll inside another.
+func scrolls_content() -> bool: return false
+
 
 
 func build_content() -> void:
@@ -61,7 +65,7 @@ func _build_node(floor_number: int) -> Button:
 	if is_next:
 		edge = 3
 		glow = 10
-	var style := ThemeBuilder.aura_style(bg, accent, edge, glow, Design.R_MD)
+	var style := ThemeBuilder.aura_style(bg, accent, edge, glow, 0.7, Design.R_MD)
 	var states: Array[String] = ["normal", "hover", "pressed", "disabled", "focus"]
 	for state in states:
 		node.add_theme_stylebox_override(state, style)

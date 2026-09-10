@@ -249,15 +249,23 @@ func _announce_currency() -> void:
 
 # ---------------- ACTIONS (cross-system operations) ----------------
 
-func summon(count: int, origin: String = "") -> Array[CardData]:
-	var cost := Config.SUMMON_COST_X10
-	if count == 1:
-		cost = Config.SUMMON_COST_X1
+func summon(count: int, banner_id: String = "") -> Array[CardData]:
+	if banner_id == "":
+		banner_id = Banners.STANDARD
+
+	var cost := Banners.cost(banner_id, count)
 	if not spend_gems(cost):
 		EventBus.toast("Not enough gems — you need " + Fmt.commas(cost) + ".", "error")
 		return []
 
-	var pulled := gacha.pull_many(count, origin)
+	var pulled := gacha.pull_many(count, banner_id)
+
+	# A banner with nothing left to give must not keep the gems.
+	if pulled.is_empty():
+		add_gems(cost)
+		EventBus.toast("That banner has no cards to summon right now.", "error")
+		return []
+
 	credit_clan(pulled.size() * 5)
 	request_save()
 	return pulled
@@ -269,6 +277,48 @@ func sell_card(card_id: String) -> int:
 		add_gold(earned)
 		EventBus.toast("Sold for " + Fmt.commas(earned) + " gold.", "success")
 	return earned
+
+
+# Gold into stats. Returns how many levels were actually bought, so the
+# caller can report "+3 levels" rather than guessing.
+func level_up_card(card_id: String, levels: int = 1) -> int:
+	if not collection.has(card_id):
+		return 0
+
+	var card: CardData = collection.owned[card_id]
+	var bought := 0
+
+	for i in maxi(levels, 1):
+		if Leveling.is_maxed(card):
+			break
+		var cost := Leveling.cost(card)
+		if not spend_gold(cost):
+			break
+		if not collection.level_up(card_id):
+			# Refund rather than pocket the gold on a failed step.
+			add_gold(cost)
+			break
+		bought += 1
+
+	if bought > 0:
+		Audio.play("levelup")
+		request_save()
+	elif Leveling.is_maxed(card):
+		EventBus.toast(card.card_name + " is already at its level cap.", "info")
+	else:
+		EventBus.toast("Not enough gold — you need "
+			+ Fmt.commas(Leveling.cost(card)) + ".", "error")
+
+	return bought
+
+
+# Buys every level the player can currently afford.
+func level_up_card_max(card_id: String) -> int:
+	if not collection.has(card_id):
+		return 0
+	var card: CardData = collection.owned[card_id]
+	var target := collection.affordable_level(card_id, gold)
+	return level_up_card(card_id, maxi(1, target - card.level))
 
 
 func merge_card(card_id: String) -> bool:

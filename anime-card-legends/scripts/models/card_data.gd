@@ -11,6 +11,12 @@ extends Resource
 @export var element: String = ""
 @export var role: String = ""
 @export var origin_tag: String = ""
+# Which summoning banner this card is themed to; "" means the standard pool.
+@export var banner_id: String = ""
+# The exact image this card was built from. Pinning it here means two
+# cards derived from sibling files (grave_knight / grave_knight_awakened)
+# never resolve to the same picture.
+@export var art_path: String = ""
 
 @export_category("Rarity")
 @export var rarity: String = "Common"
@@ -23,6 +29,15 @@ extends Resource
 @export var defense: int = 10
 @export var health: int = 100
 @export var speed: int = 10
+
+# Stats at level 1. Levelling recomputes the four above from these, so
+# repeated level-ups never compound rounding error and a level can be
+# refunded exactly. Zero means "not captured yet" - Leveling fills them
+# in from the current stats the first time it touches the card.
+@export var base_attack: int = 0
+@export var base_defense: int = 0
+@export var base_health: int = 0
+@export var base_speed: int = 0
 @export var crit_chance: float = 0.05
 @export var crit_damage: float = 1.5
 

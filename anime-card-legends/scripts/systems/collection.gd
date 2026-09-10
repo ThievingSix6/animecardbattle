@@ -72,6 +72,9 @@ func sell(card_id: String) -> int:
 	if duplicates.get(card_id, 0) > 0:
 		duplicates[card_id] -= 1
 	else:
+		# The last copy carries the levels, so the gold sunk into them
+		# comes partly back rather than evaporating.
+		value += int(round(float(Leveling.invested_gold(card)) * Leveling.REFUND_RATE))
 		owned.erase(card_id)
 		duplicates.erase(card_id)
 		team_ids.erase(card_id)
@@ -98,14 +101,50 @@ func merge(card_id: String) -> bool:
 	duplicates[card_id] = duplicates.get(card_id, 0) - (Config.MERGE_REQUIREMENT - 1)
 
 	card.rarity = Config.next_rarity(card.rarity)
-	card.attack = int(round(card.attack * Config.MERGE_STAT_GROWTH))
-	card.defense = int(round(card.defense * Config.MERGE_STAT_GROWTH))
-	card.health = int(round(card.health * Config.MERGE_STAT_GROWTH))
-	card.speed = int(round(card.speed * Config.MERGE_SPEED_GROWTH))
 	card.sell_value = int(round(card.sell_value * Config.MERGE_SELL_GROWTH))
+
+	# The merge scales the level-1 baseline, not the current numbers, so
+	# every level the player already bought survives the ascension and
+	# the new rarity's higher ceiling opens up.
+	Leveling.scale_base(card, Config.MERGE_STAT_GROWTH, Config.MERGE_SPEED_GROWTH)
 
 	EventBus.collection_changed.emit()
 	return true
+
+
+# ---------------- LEVELS ----------------
+
+# Raises a card one level. The caller has already taken the gold; this
+# only knows how to move the card.
+func level_up(card_id: String) -> bool:
+	if not owned.has(card_id):
+		return false
+	var card: CardData = owned[card_id]
+	if Leveling.is_maxed(card):
+		return false
+
+	card.level += 1
+	Leveling.apply(card)
+	EventBus.card_levelled.emit(card)
+	EventBus.collection_changed.emit()
+	return true
+
+
+# Highest level this card could reach for the gold on hand.
+func affordable_level(card_id: String, gold: int) -> int:
+	if not owned.has(card_id):
+		return 0
+	var card: CardData = owned[card_id]
+	var level := card.level
+	var budget := gold
+	var ceiling := Leveling.effective_max(card)
+	while level < ceiling:
+		var step := Leveling.cost_for(card.rarity, level)
+		if step > budget:
+			break
+		budget -= step
+		level += 1
+	return level
 
 
 # ---------------- TEAM ----------------

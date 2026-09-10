@@ -13,6 +13,10 @@ func back_route() -> String: return ""
 func shows_currency() -> bool: return false
 func shows_weather() -> bool: return false
 func requires_slot() -> bool: return false
+# This screen scrolls its own list region, so the base page scroll
+# would just nest one scroll inside another.
+func scrolls_content() -> bool: return false
+
 
 
 func build_content() -> void:
@@ -46,7 +50,7 @@ func _build_slot(slot: int) -> Control:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(280, 340)
 	panel.add_theme_stylebox_override("panel",
-		ThemeBuilder.aura_style(Design.SURFACE, accent, 2, 0, Design.R_LG))
+		ThemeBuilder.aura_style(Design.SURFACE, accent, 2, 0, 0.0, Design.R_LG))
 
 	var body := UI.vbox(Design.S3)
 	panel.add_child(body)

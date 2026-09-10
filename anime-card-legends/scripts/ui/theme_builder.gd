@@ -22,12 +22,25 @@ static func bordered_style(bg: Color, border: Color, width: int, radius: int = D
 	return s
 
 
-static func aura_style(bg: Color, accent: Color, border_width: int, aura: int, radius: int = Design.R_LG) -> StyleBoxFlat:
+# `glow` is how opaque the bloom is - the difference between an
+# Uncommon's faint edge light and an Awakened's furnace.
+static func aura_style(bg: Color, accent: Color, border_width: int, aura: int, glow: float = 0.75, radius: int = Design.R_LG) -> StyleBoxFlat:
 	var s := bordered_style(bg, accent, border_width, radius)
-	if aura > 0:
-		s.shadow_color = Design.alpha(accent, 0.75)
+	if aura > 0 and glow > 0.0:
+		s.shadow_color = Design.alpha(accent, clampf(glow, 0.0, 1.0))
 		s.shadow_size = aura
 	return s
+
+
+# A rarity's glow, ready to hang behind anything card-shaped.
+static func rarity_aura_style(rarity: String, bg: Color = Design.SURFACE, radius: int = Design.R_LG) -> StyleBoxFlat:
+	var accent := Design.rarity_color(rarity)
+	return aura_style(
+		bg, accent,
+		int(Design.RARITY_BORDER.get(rarity, 2)),
+		Design.rarity_aura(rarity),
+		Design.rarity_glow(rarity),
+		radius)
 
 
 # --- Fonts ---------------------------------------------------------

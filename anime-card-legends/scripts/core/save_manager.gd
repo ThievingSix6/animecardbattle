@@ -8,7 +8,7 @@ extends RefCounted
 # =========================================================
 
 const SLOT_COUNT := 3
-const VERSION := 4
+const VERSION := 5
 
 # Legacy single-slot file, migrated into slot 1 on first run.
 const LEGACY_PATH := "user://save.json"
@@ -85,7 +85,9 @@ static func migrate_legacy() -> void:
 
 const CARD_FIELDS: Array[String] = [
 	"card_id", "card_name", "description", "faction", "element", "role", "origin_tag",
+	"banner_id", "art_path",
 	"rarity", "modifier", "level", "max_level", "attack", "defense", "health", "speed",
+	"base_attack", "base_defense", "base_health", "base_speed",
 	"crit_chance", "crit_damage", "basic_ability", "ultimate_ability",
 	"basic_target_mode", "ultimate_target_mode", "skill_id",
 	"stars", "max_stars", "experience", "sell_value", "upgrade_cost", "obtained", "locked",
@@ -104,6 +106,13 @@ static func dict_to_card(d: Dictionary) -> CardData:
 	for f in CARD_FIELDS:
 		if d.has(f):
 			card.set(f, d[f])
+
+	# Saves written before v5 have no baseline stats and no banner. Both
+	# are reconstructed here rather than left at their defaults, so an
+	# older card levels and filters exactly like a freshly pulled one.
+	if card.banner_id == "":
+		card.banner_id = Banners.banner_for(card.element, card.role)
+	Leveling.apply(card)
 	return card
 
 
@@ -125,6 +134,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"highest_floor": progression.highest_floor,
 		"roll_packs": progression.roll_packs,
 		"boss_pool_unlocked": gacha.boss_pool_unlocked,
+		"pity": gacha.pity,
 		"items_owned": equipment.owned,
 		"items_equipped": equipment.equipped,
 		"clan": clan.to_dict(),
@@ -193,6 +203,18 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 		progression.roll_packs[key] = int(parsed["roll_packs"][key])
 
 	gacha.boss_pool_unlocked = bool(parsed.get("boss_pool_unlocked", false))
+
+	gacha.pity.clear()
+	var stored_pity = parsed.get("pity", {})
+	if typeof(stored_pity) == TYPE_DICTIONARY:
+		for key in stored_pity.keys():
+			var counters = stored_pity[key]
+			if typeof(counters) != TYPE_DICTIONARY:
+				continue
+			gacha.pity[str(key)] = {
+				"epic": int(counters.get("epic", 0)),
+				"legendary": int(counters.get("legendary", 0)),
+			}
 
 	equipment.owned.clear()
 	for key in parsed.get("items_owned", {}).keys():

@@ -11,6 +11,10 @@ var _totals: Label
 
 
 func screen_title() -> String: return "Character"
+# This screen scrolls its own list region, so the base page scroll
+# would just nest one scroll inside another.
+func scrolls_content() -> bool: return false
+
 
 
 func build_content() -> void:
