@@ -177,6 +177,13 @@ func _build_camera() -> void:
 	_pivot.add_child(_camera)
 
 
+# Hands the viewport back to the player's own camera - used when
+# stepping out of the car.
+func make_current() -> void:
+	if _camera != null:
+		_camera.current = true
+
+
 func _capture_mouse(capture: bool) -> void:
 	_mouse_captured = capture
 	if capture:

@@ -14,6 +14,11 @@ var back_route := Routes.MAIN
 var _prompt_panel: PanelContainer
 var _prompt_label: Label
 var _currency: Label
+var _hint: Label
+var _boost_panel: PanelContainer
+var _boost_bar: ProgressBar
+var _speed_label: Label
+var _driving := false
 
 
 func _init() -> void:
@@ -72,13 +77,15 @@ func _build() -> void:
 		top.add_child(UI.pill("DEV", Design.DANGER))
 
 	# Controls hint
-	var hint := UI.caption(_controls_hint())
-	hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	hint.offset_bottom = -Design.S4
-	hint.offset_top = -Design.S6
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(hint)
+	_hint = UI.caption(_controls_hint())
+	_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_hint.offset_bottom = -Design.S4
+	_hint.offset_top = -Design.S6
+	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_hint)
+
+	root.add_child(_build_boost_meter())
 
 	# Interaction prompt
 	_prompt_panel = UI.accent_panel(Design.ACCENT, Design.S3)
@@ -99,11 +106,71 @@ func _build() -> void:
 # Named for whatever is actually plugged in, rather than always
 # telling a controller player to press ENTER.
 func _controls_hint() -> String:
+	if _driving:
+		if Controls.using_controller():
+			return ("Left stick drive  ·  RB boost  ·  A jump, again to flip  ·  "
+				+ "LB drift / air roll  ·  X or B to get out")
+		return ("WASD drive  ·  Shift boost  ·  Space jump, again to flip  ·  "
+			+ "Ctrl drift / air roll  ·  E or Esc to get out")
+
 	if Controls.using_controller():
 		return ("Left stick move  ·  Right stick look  ·  A jump  ·  "
 			+ "X interact  ·  L3 sprint  ·  B back")
 	return ("WASD move  ·  Mouse look  ·  Space jump  ·  E / Enter interact  ·  "
 		+ "Shift sprint  ·  Esc free cursor")
+
+
+# --- Driving ------------------------------------------------------------
+
+func _build_boost_meter() -> Control:
+	_boost_panel = UI.accent_panel(Color("#f5a623"), Design.S3)
+	_boost_panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_boost_panel.offset_left = -260
+	_boost_panel.offset_right = -Design.S5
+	_boost_panel.offset_top = -132
+	_boost_panel.offset_bottom = -64
+	_boost_panel.visible = false
+	_boost_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var body := UI.vbox(Design.S1)
+	_boost_panel.add_child(body)
+
+	var row := UI.hbox(Design.S2)
+	row.add_child(UI.label("BOOST", Design.FS_MICRO, Design.ACCENT))
+	row.add_child(UI.spacer())
+	_speed_label = UI.label("", Design.FS_MICRO, Design.TEXT_DIM, HORIZONTAL_ALIGNMENT_RIGHT)
+	row.add_child(_speed_label)
+	body.add_child(row)
+
+	_boost_bar = ProgressBar.new()
+	_boost_bar.min_value = 0.0
+	_boost_bar.max_value = 1.0
+	_boost_bar.show_percentage = false
+	_boost_bar.custom_minimum_size = Vector2(0, 14)
+
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Design.ACCENT
+	fill.set_corner_radius_all(4)
+	_boost_bar.add_theme_stylebox_override("fill", fill)
+	body.add_child(_boost_bar)
+
+	return _boost_panel
+
+
+func set_driving(driving: bool) -> void:
+	_driving = driving
+	if _boost_panel != null:
+		_boost_panel.visible = driving
+	if _hint != null:
+		_hint.text = _controls_hint()
+
+
+func show_boost(fraction: float, speed: float) -> void:
+	if _boost_bar != null:
+		_boost_bar.value = fraction
+	if _speed_label != null:
+		# km/h reads better than m/s for something being driven.
+		_speed_label.text = "%d km/h" % int(round(speed * 3.6))
 
 
 func show_prompt(message: String) -> void:

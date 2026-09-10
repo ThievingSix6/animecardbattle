@@ -490,6 +490,22 @@ static func fit_box(node: Node3D, target_width: float, target_height: float) -> 
 	node.position.y -= box.position.y * vertical
 
 
+# Scales a model uniformly so its longest horizontal axis measures
+# `target_length`, then seats it on the ground. For anything that must
+# not be stretched - a vehicle, a character, a prop with proportions
+# that matter.
+static func fit_length(node: Node3D, target_length: float) -> float:
+	var box := _collect(node, node)
+	var longest := maxf(box.size.x, box.size.z)
+	if longest <= 0.0001:
+		return 1.0
+
+	var factor := target_length / longest
+	node.scale = Vector3(factor, factor, factor)
+	node.position.y -= box.position.y * factor
+	return factor
+
+
 # The footprint of a fitted model, for building a collision box that
 # matches whatever was imported.
 static func fitted_size(node: Node3D) -> Vector3:

@@ -119,6 +119,11 @@ var player: LobbyPlayer
 var companion: Companion
 var hud: LobbyHUD
 var portal: Portal
+var car: CarBody
+var car_camera: CarCamera
+
+# True while the player is behind the wheel rather than on foot.
+var _driving := false
 
 var _spots: Array[Dictionary] = []
 var _npcs: Dictionary = {}          # npc id -> CityNPC
@@ -146,6 +151,7 @@ func _ready() -> void:
 	_build_storefronts()
 	_build_portal()
 	_build_npcs()
+	_build_car()
 	_build_player()
 	_build_companion()
 	_build_hud()
@@ -161,10 +167,21 @@ func _process(_delta: float) -> void:
 	if _menu != null and is_instance_valid(_menu):
 		return
 
+	if _driving:
+		_update_driving()
+		return
+
 	_update_proximity()
 
 	if Controls.interact_pressed():
 		_interact()
+
+
+func _update_driving() -> void:
+	if hud != null:
+		hud.show_boost(car.boost_fraction(), car.speed())
+	if Controls.interact_pressed() or Controls.cancel_pressed():
+		_exit_car()
 
 
 func _interact() -> void:
@@ -176,6 +193,8 @@ func _interact() -> void:
 			_open_travel()
 		"npc":
 			_talk_to(str(_current["npc"]))
+		"car":
+			_enter_car()
 		_:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			# Leaving a shop drops the player back on its doorstep, not
@@ -815,6 +834,85 @@ func _build_portal() -> void:
 	})
 
 
+# --- The car -------------------------------------------------------------
+
+func _build_car() -> void:
+	car = CarBody.create()
+	# Parked on the plaza's edge, clear of the portal and the shopfronts.
+	car.position = Vector3(14.0, 0.6, 24.0)
+	car.rotation.y = PI
+	add_child(car)
+
+	car_camera = CarCamera.create(car)
+	add_child(car_camera)
+	car_camera.visible = false
+
+	_spots.append({
+		"kind": "car",
+		"name": "the car",
+		"route": "",
+		"pos": car.position,
+		"radius": 4.0,
+		"pad": null,
+		"base_color": Color("#e8552c"),
+	})
+
+
+func _enter_car() -> void:
+	if car == null or _driving:
+		return
+
+	_driving = true
+	player.visible = false
+	player.set_physics_process(false)
+	player.set_process_unhandled_input(false)
+	# Collision off as well as physics: an invisible parked body would
+	# otherwise sit in the plaza for the car to bump into.
+	player.collision_layer = 0
+	player.collision_mask = 0
+	if companion != null:
+		companion.visible = false
+
+	car.take_control()
+	car_camera.visible = true
+	car_camera.activate()
+
+	if hud != null:
+		hud.hide_prompt()
+		hud.set_driving(true)
+	Audio.play("click")
+
+
+func _exit_car() -> void:
+	if not _driving:
+		return
+
+	_driving = false
+	car.release_control()
+	car_camera.visible = false
+	car_camera.deactivate()
+
+	# Set down beside the car rather than inside it.
+	var beside := car.global_position + car.global_transform.basis.x * 2.6
+	beside.y = car.global_position.y + 1.2
+	player.global_position = beside
+	player.velocity = Vector3.ZERO
+	player.visible = true
+	player.collision_layer = 1
+	player.collision_mask = 1
+	player.set_physics_process(true)
+	player.set_process_unhandled_input(true)
+	player.make_current()
+
+	if companion != null:
+		companion.visible = true
+		companion.global_position = beside
+
+	if hud != null:
+		hud.set_driving(false)
+	Audio.play("click")
+
+
 # --- People --------------------------------------------------------------
 
 func _build_npcs() -> void:
@@ -962,10 +1060,15 @@ func _update_proximity() -> void:
 		# A wandering NPC moves, so its position is read from the node
 		# rather than from where it was first placed.
 		var spot_pos: Vector3 = spot["pos"]
-		if str(spot.get("kind", "route")) == "npc":
+		# NPCs wander and the car gets driven away, so both are read
+		# from the node rather than from where they were first placed.
+		var kind := str(spot.get("kind", "route"))
+		if kind == "npc":
 			var npc: CityNPC = _npcs.get(str(spot["npc"]))
 			if npc != null:
 				spot_pos = npc.position
+		elif kind == "car" and car != null:
+			spot_pos = car.global_position
 
 		var distance := flat_player.distance_to(Vector2(spot_pos.x, spot_pos.z))
 		var radius: float = spot["radius"]
@@ -990,6 +1093,8 @@ func _update_proximity() -> void:
 			hud.show_prompt("Press %s to travel" % key)
 		"npc":
 			hud.show_prompt("Press %s to talk to %s" % [key, str(closest["name"])])
+		"car":
+			hud.show_prompt("Press %s to drive" % key)
 		_:
 			hud.show_prompt("Press %s to visit %s" % [key, str(closest["name"])])
 
@@ -1000,7 +1105,7 @@ func _set_spot_active(spot: Dictionary, active: bool) -> void:
 			if portal != null:
 				portal.set_active(active)
 			return
-		"npc":
+		"npc", "car":
 			return
 
 	var pad: MeshInstance3D = spot["pad"]

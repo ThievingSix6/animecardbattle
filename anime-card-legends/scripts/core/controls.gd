@@ -70,6 +70,21 @@ const ACTIONS: Array[Dictionary] = [
 		"axis": [],
 	},
 	{
+		# Boost. Right shoulder is where every driving game puts it.
+		"name": "acl_boost",
+		"keys": [KEY_SHIFT],
+		"buttons": [JOY_BUTTON_RIGHT_SHOULDER],
+		"axis": [],
+	},
+	{
+		# Powerslide on the ground; converts yaw into roll in the air,
+		# which is the air-roll modifier.
+		"name": "acl_drift",
+		"keys": [KEY_CTRL],
+		"buttons": [JOY_BUTTON_LEFT_SHOULDER],
+		"axis": [],
+	},
+	{
 		"name": "acl_cancel",
 		"keys": [KEY_ESCAPE],
 		"buttons": [JOY_BUTTON_B],
