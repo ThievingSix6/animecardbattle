@@ -173,6 +173,17 @@ static func is_boss_stage(stage_index: int) -> bool:
 
 # --- Labels ----------------------------------------------------------
 
+# The first word of a zone's name - what fits on a row of buttons.
+static func short_name(zone: Dictionary) -> String:
+	var parts := str(zone["name"]).split(" ", false)
+	if parts.is_empty():
+		return str(zone["name"])
+	# "The Tower's Heart" reads better as "Heart" than as "The".
+	if str(parts[0]).to_lower() == "the" and parts.size() > 1:
+		return str(parts[parts.size() - 1])
+	return str(parts[0])
+
+
 static func zone_name_for_floor(floor_number: int) -> String:
 	var zone := zone_for_floor(floor_number)
 	return str(zone["name"])

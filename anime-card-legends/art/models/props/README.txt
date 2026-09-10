@@ -43,6 +43,11 @@ Any file in that folder whose name contains "emissive", "emission" or
 A model that already has emission baked into its material is never
 overridden - the sidecar only fills in what the export left empty.
 
+The map TINTS the emission rather than adding to it. Godot's default
+is the other way round, which makes a white emission colour over a
+black mask light the entire model flat white - that is what these
+models were doing before, and the maps themselves were never at fault.
+
 To change how hard the sidecar glows, edit EMISSIVE_ENERGY at the top
 of scripts/lobby3d/models.gd.
 

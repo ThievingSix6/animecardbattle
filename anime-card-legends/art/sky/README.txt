@@ -14,3 +14,13 @@ horizon, and a starfield. That is the sky you are seeing if you have
 not added a file.
 
 The older location, res://art/ui/lobby_sky.png, still works.
+
+
+IF THE SKY IS A FLAT COLOUR
+---------------------------
+
+That was a bug, not a missing file: Godot's fog_sky_affect defaults to
+1.0, and the sky sits at infinite depth, so exponential fog resolved
+to 100% out there and painted the whole sky in the fog colour -
+panorama, stars and all. It is set to 0.0 in both worlds now, so fog
+still works on geometry and leaves the sky alone.

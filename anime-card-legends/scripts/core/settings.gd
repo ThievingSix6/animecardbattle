@@ -26,6 +26,13 @@ var music_volume := 0.5
 var battle_speed_index := 1
 var reduce_flashing := false
 
+# Developer mode. Global rather than per save, so it survives switching
+# profiles and never ends up baked into someone's save file.
+#
+# While it is on, every campaign floor is treated as unlocked, so the
+# late zones can be walked into and looked at without grinding to them.
+var dev_mode := false
+
 var _dirty := false
 var _cooldown := 0.0
 
@@ -85,6 +92,12 @@ func set_reduce_flashing(value: bool) -> void:
 	_announce()
 
 
+func set_dev_mode(value: bool) -> void:
+	dev_mode = value
+	EventBus.toast("Developer mode " + ("ON" if value else "OFF"), "info")
+	_announce()
+
+
 func reset_to_defaults() -> void:
 	sfx_volume = 0.8
 	music_volume = 0.5
@@ -113,6 +126,7 @@ func load_settings() -> void:
 		int(config.get_value("gameplay", "battle_speed_index", battle_speed_index)),
 		0, BATTLE_SPEEDS.size() - 1)
 	reduce_flashing = bool(config.get_value("gameplay", "reduce_flashing", reduce_flashing))
+	dev_mode = bool(config.get_value("gameplay", "dev_mode", dev_mode))
 
 	_apply_to_audio()
 
@@ -123,6 +137,7 @@ func save_settings() -> void:
 	config.set_value("audio", "music_volume", music_volume)
 	config.set_value("gameplay", "battle_speed_index", battle_speed_index)
 	config.set_value("gameplay", "reduce_flashing", reduce_flashing)
+	config.set_value("gameplay", "dev_mode", dev_mode)
 	config.save(PATH)
 
 

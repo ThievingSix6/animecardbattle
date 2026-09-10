@@ -15,12 +15,25 @@ func screen_title() -> String: return "Settings"
 # has to mean the title in that case rather than a screen that would
 # immediately bounce for want of a save slot.
 func back_route() -> String:
+	# Opened by the cog from wherever the player was standing, so back
+	# means there - the city, a zone, the collection - rather than always
+	# the main menu.
+	if Routes.settings_return != "":
+		return Routes.settings_return
 	if GameState.has_active_slot():
 		return Routes.MAIN
 	return Routes.TITLE
 func requires_slot() -> bool: return false
+func shows_settings_button() -> bool: return false
 func shows_currency() -> bool: return false
 func shows_weather() -> bool: return false
+
+
+# Cleared on the way out so a later visit from the main menu does not
+# inherit the last cog's destination.
+func _exit_tree() -> void:
+	super()
+	Routes.settings_return = ""
 
 
 func build_content() -> void:
@@ -59,6 +72,9 @@ func build_content() -> void:
 	play_body.add_child(_flashing_row())
 
 	content.add_child(play_panel)
+
+	content.add_child(UI.section("Developer"))
+	content.add_child(_dev_panel())
 
 	# --- Actions ---
 
@@ -142,6 +158,127 @@ func _flashing_row() -> Control:
 	row.add_child(toggle)
 
 	return row
+
+
+# --- Developer mode ----------------------------------------------------
+#
+# One toggle opens the whole campaign, because zone select, the 3D stage
+# pads and the portal all ask ProgressionSystem.is_unlocked() - so the
+# switch lives there and everything follows.
+
+func _dev_panel() -> Control:
+	var panel := UI.panel(Design.SURFACE, Design.S4)
+	var body := UI.vbox(Design.S3)
+	panel.add_child(body)
+
+	var row := UI.hbox(Design.S4)
+	var text := UI.vbox(Design.S1)
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text.add_child(UI.label("Developer mode", Design.FS_BODY))
+	text.add_child(UI.caption(
+		"Unlocks every zone and stage so the late game can be walked "
+		+ "into and looked at. Saved globally, not into a profile."))
+	row.add_child(text)
+
+	var toggle := CheckButton.new()
+	toggle.button_pressed = Settings.dev_mode
+	toggle.toggled.connect(_on_dev_toggled)
+	row.add_child(toggle)
+	body.add_child(row)
+
+	if not Settings.dev_mode:
+		return panel
+
+	body.add_child(UI.separator())
+
+	if not GameState.has_active_slot():
+		body.add_child(UI.caption("Open a profile to use the shortcuts below."))
+		return panel
+
+	body.add_child(UI.label("Jump to a zone", Design.FS_BODY, Design.ACCENT))
+	body.add_child(UI.caption(
+		"Sets your highest cleared floor to the end of the zone before it, "
+		+ "then drops you into that zone."))
+
+	var zones := UI.hbox(Design.S2)
+	for zone_index in Campaign.ZONES.size():
+		var index := zone_index
+		var zone := Campaign.zone_at(index)
+		var button := UI.button(Campaign.short_name(zone), func(): _dev_jump(index), Vector2(0, 42))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_color_override("font_color", Color(str(zone["accent"])))
+		zones.add_child(button)
+	body.add_child(zones)
+
+	body.add_child(UI.separator())
+
+	var grants := UI.hbox(Design.S2)
+	grants.add_child(_dev_button("Unlock every floor", func():
+		GameState.progression.dev_unlock_all()
+		GameState.save_now()))
+	grants.add_child(_dev_button("+100k 💎", func():
+		GameState.add_gems(100000)))
+	grants.add_child(_dev_button("+1M 🪙", func():
+		GameState.add_gold(1000000)))
+	body.add_child(grants)
+
+	var more := UI.hbox(Design.S2)
+	more.add_child(_dev_button("Grant one of every card", _dev_grant_cards))
+	more.add_child(_dev_button("Max the team's levels", _dev_max_levels))
+	body.add_child(more)
+
+	body.add_child(UI.caption(_dev_status()))
+	return panel
+
+
+func _dev_button(label: String, on_press: Callable) -> Button:
+	var button := UI.button(label, on_press, Vector2(0, 42))
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return button
+
+
+func _dev_status() -> String:
+	var progression := GameState.progression
+	return "Highest floor %d of %d  ·  %d cards owned  ·  gauntlet best wave %d" % [
+		progression.highest_floor, Config.MAX_FLOOR,
+		GameState.collection.unique_count(),
+		progression.gauntlet_best + 1]
+
+
+func _on_dev_toggled(pressed: bool) -> void:
+	Settings.set_dev_mode(pressed)
+	_rebuild()
+
+
+# Clears everything up to the zone's door rather than the whole game, so
+# the zone is entered at its own first stage instead of already finished.
+func _dev_jump(zone_index: int) -> void:
+	var first_floor := Campaign.floor_for(zone_index, 0)
+	GameState.progression.dev_set_floor(maxi(0, first_floor - 1))
+	GameState.progression.pending_zone = zone_index
+	GameState.save_now()
+	Routes.go(self, Routes.ZONE)
+
+
+func _dev_grant_cards() -> void:
+	var added := 0
+	for template in GameState.gacha.all_templates():
+		if GameState.collection.has(template.card_id):
+			continue
+		GameState.collection.add(template)
+		added += 1
+	GameState.save_now()
+	show_toast("Granted %d new cards." % added, "success")
+	_rebuild()
+
+
+func _dev_max_levels() -> void:
+	for card in GameState.collection.get_team():
+		card.level = Leveling.effective_max(card)
+		Leveling.apply(card)
+	GameState.save_now()
+	EventBus.collection_changed.emit()
+	show_toast("Team levelled to its caps.", "success")
 
 
 # --- Handlers ----------------------------------------------------------

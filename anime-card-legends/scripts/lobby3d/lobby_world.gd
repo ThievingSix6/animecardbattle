@@ -25,28 +25,57 @@ extends Node3D
 #
 # Blocks sit on a grid; the gaps between them are the streets.
 
-const CITY_HALF := 360.0
-const BLOCK_SIZE := 44.0
-const STREET_WIDTH := 14.0
+# Just over a square kilometre. Big enough that walking it is a
+# journey and a vehicle would earn its place.
+const CITY_HALF := 520.0
+
+# One block, plus the street on two of its sides. Streets are 26 m -
+# wide enough to drive two ways down - and every third one is an avenue
+# at 38 m.
+const STREET_WIDTH := 26.0
+const AVENUE_WIDTH := 38.0
+const AVENUE_EVERY := 3
+const BLOCK_SIZE := 52.0
 const BLOCK_PITCH := BLOCK_SIZE + STREET_WIDTH
 const BLOCKS_OUT := 6
 
-# The open square in the middle: portal, NPCs, and the eight
-# destinations around its edge.
-const PLAZA_RADIUS := 34.0
-const STOREFRONT_RING := 52.0
+# Each block is four lots with alleys between them, so the district has
+# gaps to see through rather than being a solid wall of frontage.
+const LOTS_PER_BLOCK := 2
+const LOT_SIZE := BLOCK_SIZE / float(LOTS_PER_BLOCK)
 
-const BUILDING_HEIGHT_MIN := 16.0
-const BUILDING_HEIGHT_MAX := 52.0
-const STOREFRONT_HEIGHT := 14.0
-const TOWER_HEIGHT := 46.0
+# How much of a lot a building actually covers. The rest is the gap.
+const FOOTPRINT_MIN := 0.52
+const FOOTPRINT_MAX := 0.72
+
+# Lots left empty on purpose - yards, car parks, the odd gap. Sightlines
+# are what stop a grid reading as a corridor.
+const EMPTY_LOT_CHANCE := 0.2
+
+# Most of the city is low. The handful of towers are what make the
+# skyline, and they cluster toward the middle.
+const BUILDING_HEIGHT_MIN := 9.0
+const BUILDING_HEIGHT_MAX := 32.0
+const TOWER_CHANCE := 0.09
+const TOWER_HEIGHT_MIN := 44.0
+const TOWER_HEIGHT_MAX := 78.0
+
+# The open square in the middle: portal, NPCs, and the destinations
+# around its edge.
+const PLAZA_RADIUS := 42.0
+const STOREFRONT_RING := 66.0
+
+const STOREFRONT_WIDTH := 26.0
+const STOREFRONT_HEIGHT := 16.0
+const TOWER_WIDTH := 34.0
+const TOWER_HEIGHT := 62.0
 
 const PAD_RADIUS := 7.0
 
 # Lights and signs are the expensive part of a city, not the geometry.
 # Both are spent near the middle, where the player actually is.
-const LIT_RADIUS := 170.0
-const MAX_STREET_LIGHTS := 16
+const LIT_RADIUS := 220.0
+const MAX_STREET_LIGHTS := 22
 const MAX_NEON_SIGNS := 26
 # Only some signs get a real light; the rest glow on their own. The
 # Compatibility renderer only lets a given surface take eight omni
@@ -183,6 +212,13 @@ func _build_environment() -> void:
 	env.fog_light_color = Color("#1d1830")
 	env.fog_density = 0.006
 
+	# THE reason the sky was a flat colour. fog_sky_affect defaults to
+	# 1.0, and the sky sits at infinite depth, so exponential fog
+	# resolves to 100% at that distance and paints the entire sky in
+	# fog_light_color - panorama, stars, gradient and all. Zero here
+	# leaves the sky alone; the fog still does its job on geometry.
+	env.fog_sky_affect = 0.0
+
 	# Bloom needs HDR, which the Compatibility renderer does not have.
 	# Asking for it there costs nothing but does nothing either.
 	if RenderMode.supports_glow():
@@ -265,15 +301,27 @@ func _build_perimeter_wall() -> void:
 # the ground collider already covers all of it.
 func _build_streets() -> void:
 	var lights := 0
+	var span := CITY_HALF * 2.0
 
 	for i in range(-BLOCKS_OUT, BLOCKS_OUT + 2):
 		var offset := (float(i) - 0.5) * BLOCK_PITCH
-		_street_strip(Vector3(0, 0.02, offset), Vector3(CITY_HALF * 2.0, 0.04, STREET_WIDTH))
-		_street_strip(Vector3(offset, 0.02, 0), Vector3(STREET_WIDTH, 0.04, CITY_HALF * 2.0))
+		var avenue := absi(i) % AVENUE_EVERY == 0
+		var width := STREET_WIDTH
+		if avenue:
+			width = AVENUE_WIDTH
 
-		# Street lamps along the near stretch of each road only. A lamp
-		# every block over the whole district would be hundreds of lights.
-		for j in range(-2, 3):
+		_street_strip(Vector3(0, 0.02, offset), Vector3(span, 0.04, width), avenue)
+		_street_strip(Vector3(offset, 0.02, 0), Vector3(width, 0.04, span), avenue)
+
+		if avenue:
+			# A centre line is the cheapest thing that makes a strip of
+			# dark ground read as a road you could drive down.
+			_centre_line(Vector3(0, 0.05, offset), Vector3(span, 0.02, 0.5))
+			_centre_line(Vector3(offset, 0.05, 0), Vector3(0.5, 0.02, span))
+
+		# Lamps only along the stretches near the plaza. A lamp at every
+		# junction across a square kilometre would be hundreds of lights.
+		for j in range(-3, 4):
 			if lights >= MAX_STREET_LIGHTS:
 				continue
 			var along := float(j) * BLOCK_PITCH
@@ -300,7 +348,7 @@ func _build_streets() -> void:
 	add_child(plaza)
 
 
-func _street_strip(at: Vector3, size: Vector3) -> void:
+func _street_strip(at: Vector3, size: Vector3, avenue: bool) -> void:
 	var strip := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
@@ -309,10 +357,28 @@ func _street_strip(at: Vector3, size: Vector3) -> void:
 
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color("#141824")
+	if avenue:
+		mat.albedo_color = Color("#181d2b")
 	mat.roughness = 0.28
 	mat.metallic = 0.3
 	strip.material_override = mat
 	add_child(strip)
+
+
+func _centre_line(at: Vector3, size: Vector3) -> void:
+	var line := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	line.mesh = box
+	line.position = at
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color("#c8a24a")
+	mat.emission_enabled = true
+	mat.emission = Color("#c8a24a")
+	mat.emission_energy_multiplier = RenderMode.emission(0.35)
+	line.material_override = mat
+	add_child(line)
 
 
 func _street_lamp(at: Vector3) -> void:
@@ -371,11 +437,14 @@ func _build_skyline() -> void:
 	multi.use_colors = fallback
 	multi.instance_count = placements.size()
 
-	# One mesh, measured once: every instance is that mesh scaled.
-	var fit := Models.mesh_fit(mesh, 1.0)
-	var unit_scale := float(fit["scale"])
-	var unit_size: Vector3 = fit["size"]
-	var unit_offset := float(fit["offset"])
+	# Measured once, then each copy is scaled to its own footprint and
+	# its own height SEPARATELY. Scaling uniformly is what made the old
+	# district a wall of giants: asking for a 50 m tower also gave it a
+	# 50 m footprint, so it swallowed its lot and both its streets.
+	var fit := Models.mesh_fit_box(mesh)
+	var per_width := float(fit["per_width"])
+	var per_height := float(fit["per_height"])
+	var base_lift := float(fit["base"])
 
 	var body := StaticBody3D.new()
 	add_child(body)
@@ -386,11 +455,12 @@ func _build_skyline() -> void:
 		var spot: Dictionary = placements[i]
 		var at: Vector3 = spot["pos"]
 		var height := float(spot["height"])
+		var width := float(spot["width"])
 		var spin := float(spot["spin"])
 
 		var basis := Basis(Vector3.UP, spin).scaled(
-			Vector3(unit_scale * height, unit_scale * height, unit_scale * height))
-		var origin := at + Vector3(0.0, unit_offset * height, 0.0)
+			Vector3(per_width * width, per_height * height, per_width * width))
+		var origin := at + Vector3(0.0, base_lift * height, 0.0)
 		multi.set_instance_transform(i, Transform3D(basis, origin))
 
 		if fallback:
@@ -398,11 +468,9 @@ func _build_skyline() -> void:
 			multi.set_instance_color(i, shade)
 
 		# Collision as plain boxes under one body.
-		var footprint := Vector3(
-			maxf(unit_size.x * height, 2.0), height, maxf(unit_size.z * height, 2.0))
 		var shape := CollisionShape3D.new()
 		var box_shape := BoxShape3D.new()
-		box_shape.size = footprint
+		box_shape.size = Vector3(width, height, width)
 		shape.shape = box_shape
 		shape.position = at + Vector3(0.0, height * 0.5, 0.0)
 		body.add_child(shape)
@@ -410,8 +478,7 @@ func _build_skyline() -> void:
 		# Signage, spent near the plaza where it is actually seen.
 		if signs < MAX_NEON_SIGNS and Vector2(at.x, at.z).length() < LIT_RADIUS:
 			if _rng.randf() < 0.65:
-				_build_neon(at, height, maxf(footprint.x, footprint.z), spin,
-					signs % NEON_LIGHT_EVERY == 0)
+				_build_neon(at, height, width, spin, signs % NEON_LIGHT_EVERY == 0)
 				signs += 1
 
 	var node := MultiMeshInstance3D.new()
@@ -428,8 +495,8 @@ func _build_skyline() -> void:
 	add_child(node)
 
 
-# Four buildings to a block, jittered, with the plaza and the
-# storefront ring left clear.
+# Four lots to a block, with alleys between them, the odd lot left
+# empty, and the plaza and storefront ring kept clear.
 func _plan_skyline() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 
@@ -437,33 +504,53 @@ func _plan_skyline() -> Array[Dictionary]:
 		for gz in range(-BLOCKS_OUT, BLOCKS_OUT + 1):
 			var block := Vector3(float(gx) * BLOCK_PITCH, 0.0, float(gz) * BLOCK_PITCH)
 
-			for lx in 2:
-				for lz in 2:
-					var at := block + Vector3(
-						(float(lx) - 0.5) * BLOCK_SIZE * 0.5,
+			for lx in LOTS_PER_BLOCK:
+				for lz in LOTS_PER_BLOCK:
+					var lot := block + Vector3(
+						(float(lx) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE,
 						0.0,
-						(float(lz) - 0.5) * BLOCK_SIZE * 0.5)
-					at.x += _rng.randf_range(-2.5, 2.5)
-					at.z += _rng.randf_range(-2.5, 2.5)
+						(float(lz) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE)
 
-					if Vector2(at.x, at.z).length() < STOREFRONT_RING + 22.0:
+					if Vector2(lot.x, lot.z).length() < STOREFRONT_RING + 26.0:
+						continue
+					# Gaps are what stop a grid reading as a corridor.
+					if _rng.randf() < EMPTY_LOT_CHANCE:
 						continue
 
-					# Taller toward the middle, so the district has a
-					# centre rather than being flat everywhere.
-					var closeness := 1.0 - clampf(
-						Vector2(at.x, at.z).length() / CITY_HALF, 0.0, 1.0)
-					var height := _rng.randf_range(
-						BUILDING_HEIGHT_MIN,
-						lerpf(BUILDING_HEIGHT_MIN + 8.0, BUILDING_HEIGHT_MAX, closeness))
-
-					out.append({
-						"pos": at,
-						"height": height,
-						"spin": float(_rng.randi() % 4) * (PI * 0.5),
-					})
+					out.append(_plan_building(lot))
 
 	return out
+
+
+func _plan_building(lot: Vector3) -> Dictionary:
+	# The footprint never fills its lot, so there is always an alley.
+	var width := LOT_SIZE * _rng.randf_range(FOOTPRINT_MIN, FOOTPRINT_MAX)
+
+	# Jitter within whatever room the footprint left.
+	# Kept tight enough that a jittered building cannot poke into the
+	# street: lot half-width, minus half the footprint, is the budget.
+	var slack := (LOT_SIZE - width) * 0.25
+	var at := lot + Vector3(
+		_rng.randf_range(-slack, slack), 0.0, _rng.randf_range(-slack, slack))
+
+	# Most of the city is low. Towers are rare and cluster toward the
+	# middle, which is what gives the skyline a centre.
+	var closeness := 1.0 - clampf(Vector2(at.x, at.z).length() / CITY_HALF, 0.0, 1.0)
+	var height := _rng.randf_range(
+		BUILDING_HEIGHT_MIN,
+		lerpf(BUILDING_HEIGHT_MIN + 6.0, BUILDING_HEIGHT_MAX, closeness))
+
+	if _rng.randf() < TOWER_CHANCE * (0.35 + closeness):
+		height = _rng.randf_range(TOWER_HEIGHT_MIN, TOWER_HEIGHT_MAX)
+		# A tower is narrower than its neighbours, not wider.
+		width *= 0.8
+
+	return {
+		"pos": at,
+		"width": width,
+		"height": height,
+		"spin": float(_rng.randi() % 4) * (PI * 0.5),
+	}
 
 
 # A lit word and a glowing bar on the side of a building that faces the
@@ -547,7 +634,7 @@ func _build_storefront(destination: Dictionary, at: Vector3, height: float) -> N
 	add_child(root)
 
 	var model_id := str(destination["model"])
-	var footprint := _place_destination_building(root, model_id, height)
+	var footprint := _place_destination_building(root, model_id, STOREFRONT_WIDTH, height)
 
 	_build_sign(root, str(destination["sign"]), tint, height, footprint)
 	_build_plate(root, "%s  %s" % [str(destination["icon"]), str(destination["name"])], height)
@@ -585,7 +672,7 @@ func _build_tower(at: Vector3) -> void:
 	root.rotation.y = atan2(-at.x, -at.z)
 	add_child(root)
 
-	var footprint := _place_destination_building(root, "tower", TOWER_HEIGHT)
+	var footprint := _place_destination_building(root, "tower", TOWER_WIDTH, TOWER_HEIGHT)
 	_build_sign(root, "TOWER", tint, TOWER_HEIGHT, footprint)
 	_build_plate(root, "🔥  The Tower", TOWER_HEIGHT)
 
@@ -602,7 +689,9 @@ func _build_tower(at: Vector3) -> void:
 	_place_npc(Npcs.DIABLO, door, tint)
 
 
-func _place_destination_building(root: Node3D, model_id: String, height: float) -> float:
+# Width and height are set independently here too, so a tall tower is a
+# tower rather than a cube that fills the plaza.
+func _place_destination_building(root: Node3D, model_id: String, width: float, height: float) -> float:
 	# A model named after the destination wins; otherwise the shared
 	# building stands in, so the city is complete either way.
 	var model := Models.spawn_prop("buildings/" + model_id)
@@ -611,12 +700,10 @@ func _place_destination_building(root: Node3D, model_id: String, height: float) 
 
 	if model != null:
 		root.add_child(model)
-		Models.fit_height(model, height)
-		var size := Models.fitted_size(model)
-		_add_box_collider(root, Vector3(maxf(size.x, 4.0), height, maxf(size.z, 4.0)))
-		return maxf(size.x, size.z)
+		Models.fit_box(model, width, height)
+		_add_box_collider(root, Vector3(width, height, width))
+		return width
 
-	var width := 16.0
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = Vector3(width, height, width)
@@ -731,10 +818,10 @@ func _build_npcs() -> void:
 	# The Boy roams the district, so he is somewhere different every
 	# time the player comes back.
 	var boy_angle := _rng.randf_range(0.0, TAU)
-	var boy_at := Vector3(cos(boy_angle), 0.0, sin(boy_angle)) * _rng.randf_range(70.0, 150.0)
+	var boy_at := Vector3(cos(boy_angle), 0.0, sin(boy_angle)) * _rng.randf_range(90.0, 220.0)
 	var boy := _place_npc(Npcs.THE_BOY, boy_at, Npcs.tint(Npcs.THE_BOY))
 	if boy != null:
-		boy.roam_radius = 110.0
+		boy.roam_radius = 180.0
 		boy.street_pitch = BLOCK_PITCH
 
 		# Walking back in straight after beating him finds him where he
@@ -746,7 +833,7 @@ func _build_npcs() -> void:
 	# The Jokester turns up wherever she likes, but inside the plaza ring
 	# so she is never standing in the middle of a building.
 	var joke_angle := _rng.randf_range(0.0, TAU)
-	var joke_at := Vector3(cos(joke_angle), 0.0, sin(joke_angle)) * _rng.randf_range(16.0, 32.0)
+	var joke_at := Vector3(cos(joke_angle), 0.0, sin(joke_angle)) * _rng.randf_range(18.0, 38.0)
 	_place_npc(Npcs.THE_JOKESTER, joke_at, Npcs.tint(Npcs.THE_JOKESTER))
 
 
@@ -830,7 +917,7 @@ func _talk_jokester() -> void:
 
 func _build_player() -> void:
 	player = LobbyPlayer.new()
-	player.position = Vector3(0, 1.2, 18)
+	player.position = Vector3(0, 1.2, 22)
 	add_child(player)
 
 

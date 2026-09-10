@@ -42,6 +42,11 @@ func requires_slot() -> bool:
 func scrolls_content() -> bool:
 	return true
 
+# Every screen carries a way into settings. The settings screen itself
+# turns this off, and so can anything that needs its top-right corner.
+func shows_settings_button() -> bool:
+	return true
+
 func build_content() -> void:
 	pass
 
@@ -144,6 +149,15 @@ func _build_chrome() -> void:
 	add_child(_toast_layer)
 
 
+# This screen's own scene path, so settings can come back to it. Falls
+# back to the main menu for a scene that is not in the registry.
+func _own_route() -> String:
+	var path := scene_file_path
+	if path == "":
+		return Routes.MAIN
+	return path
+
+
 func _load_background(key: String) -> Texture2D:
 	if key == "":
 		return null
@@ -170,6 +184,18 @@ func _build_header() -> HBoxContainer:
 
 	header_actions = UI.hbox(Design.S2)
 	header.add_child(header_actions)
+
+	if shows_settings_button():
+		var cog := UI.button("⚙", func(): Routes.open_settings(self, _own_route()), Vector2(46, 44))
+		cog.tooltip_text = "Settings"
+		header.add_child(cog)
+
+	# Developer mode is loud on purpose: it unlocks the whole campaign,
+	# and leaving it on by accident would quietly invalidate a playthrough.
+	if Settings.dev_mode:
+		var flag := UI.pill("DEV", Design.DANGER)
+		flag.tooltip_text = "Developer mode is on — every floor is unlocked."
+		header.add_child(flag)
 
 	if shows_currency():
 		_currency_label = UI.label("", Design.FS_HEADING, Design.TEXT, HORIZONTAL_ALIGNMENT_RIGHT)

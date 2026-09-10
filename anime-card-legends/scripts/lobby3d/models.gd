@@ -191,22 +191,19 @@ static func first_material(root: Node, base_path: String) -> Material:
 	var source: Material = node.get_surface_override_material(0)
 	if source == null and node.mesh != null and node.mesh.get_surface_count() > 0:
 		source = node.mesh.surface_get_material(0)
-	if source == null or not (source is StandardMaterial3D):
+	if source == null or not (source is BaseMaterial3D):
 		return source
 
 	var texture := emissive_texture(base_path)
 	if texture == null:
 		return source
 
-	var base: StandardMaterial3D = source
+	var base: BaseMaterial3D = source
 	if base.emission_enabled and base.emission_texture != null:
 		return base
 
-	var lit: StandardMaterial3D = base.duplicate()
-	lit.emission_enabled = true
-	lit.emission_texture = texture
-	lit.emission = Color.WHITE
-	lit.emission_energy_multiplier = RenderMode.emission(EMISSIVE_ENERGY)
+	var lit: BaseMaterial3D = base.duplicate()
+	_light_material(lit, texture, EMISSIVE_ENERGY)
 	return lit
 
 
@@ -220,17 +217,18 @@ static func _first_mesh_node(root: Node) -> MeshInstance3D:
 	return null
 
 
-# The size of a mesh scaled so it stands `target_height` tall, without
-# instancing anything - what a MultiMesh needs to place its copies.
-static func mesh_fit(mesh: Mesh, target_height: float) -> Dictionary:
+# The MultiMesh version of fit_box: the horizontal and vertical scales
+# a mesh needs to stand `height` tall on a `width` footprint, plus how
+# far to lift it so its base sits on the ground.
+static func mesh_fit_box(mesh: Mesh) -> Dictionary:
 	var box := mesh.get_aabb()
-	if box.size.y <= 0.0001:
-		return {"scale": 1.0, "offset": 0.0, "size": box.size}
-	var factor := target_height / box.size.y
+	var widest := maxf(box.size.x, box.size.z)
+	if box.size.y <= 0.0001 or widest <= 0.0001:
+		return {"per_width": 1.0, "per_height": 1.0, "base": 0.0}
 	return {
-		"scale": factor,
-		"offset": -box.position.y * factor,
-		"size": box.size * factor,
+		"per_width": 1.0 / widest,
+		"per_height": 1.0 / box.size.y,
+		"base": -box.position.y / box.size.y,
 	}
 
 
@@ -372,21 +370,45 @@ static func _light_surface(mesh_node: MeshInstance3D, surface: int, texture: Tex
 	var source: Material = mesh_node.get_surface_override_material(surface)
 	if source == null:
 		source = mesh_node.mesh.surface_get_material(surface)
-	if source == null or not (source is StandardMaterial3D):
+	# BaseMaterial3D, not StandardMaterial3D: glTF imports can arrive as
+	# ORMMaterial3D, which is a sibling class, not a subclass, so the
+	# narrower check silently skipped those models entirely.
+	if source == null or not (source is BaseMaterial3D):
 		return
 
-	var base: StandardMaterial3D = source
+	var base: BaseMaterial3D = source
 	if base.emission_enabled and base.emission_texture != null:
 		return
 
 	# Duplicated so two instances of one model cannot fight over the
 	# same material resource.
-	var lit: StandardMaterial3D = base.duplicate()
-	lit.emission_enabled = true
-	lit.emission_texture = texture
-	lit.emission = Color.WHITE
-	lit.emission_energy_multiplier = RenderMode.emission(energy)
+	var lit: BaseMaterial3D = base.duplicate()
+	_light_material(lit, texture, energy)
 	mesh_node.set_surface_override_material(surface, lit)
+
+
+# The one that mattered: emission_operator.
+#
+# Godot's default is EMISSION_OP_ADD, and ADD means the emission COLOUR
+# is added to the texture rather than tinting it:
+#
+#     EMISSION = (emission + emission_tex) * energy
+#
+# So a white emission colour over a black mask lights the entire model
+# flat white, which is exactly what these models were doing - the maps
+# themselves are proper masks, brightest pixel 148/255 and means near
+# zero, so they could never have produced that on their own.
+#
+# MULTIPLY makes the colour a tint over the mask, which is what a
+# sidecar emissive map is for:
+#
+#     EMISSION = (emission * emission_tex) * energy
+static func _light_material(material: BaseMaterial3D, texture: Texture2D, energy: float) -> void:
+	material.emission_enabled = true
+	material.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+	material.emission_texture = texture
+	material.emission = Color.WHITE
+	material.emission_energy_multiplier = RenderMode.emission(energy)
 
 
 # --- Measuring and fitting -----------------------------------------------
@@ -445,6 +467,27 @@ static func fit_height(node: Node3D, target_height: float) -> float:
 	node.scale = Vector3(factor, factor, factor)
 	node.position.y -= box.position.y * factor
 	return factor
+
+
+# Fits a model to a target footprint AND a target height independently.
+#
+# fit_height() scales uniformly, which ties a building's width to how
+# tall it is: ask for a 50 m tower and you get a 50 m-wide block that
+# swallows its own street. This keeps the footprint to the lot and lets
+# the height run free, which is what makes a tower a tower.
+static func fit_box(node: Node3D, target_width: float, target_height: float) -> void:
+	var box := _collect(node, node)
+	if box.size.y <= 0.0001:
+		return
+
+	var widest := maxf(box.size.x, box.size.z)
+	var horizontal := 1.0
+	if widest > 0.0001:
+		horizontal = target_width / widest
+	var vertical := target_height / box.size.y
+
+	node.scale = Vector3(horizontal, vertical, horizontal)
+	node.position.y -= box.position.y * vertical
 
 
 # The footprint of a fitted model, for building a collision box that
@@ -508,6 +551,12 @@ const DEFEAT_WORDS: Array[String] = [
 # Every clip an actor uses, resolved together so the fallbacks can see
 # each other: an actor with no idle borrows its talk clip, and one with
 # no talk borrows its idle.
+#
+# Also makes the continuous clips loop. glTF has no concept of a looping
+# animation, so every clip arrives as LOOP_NONE and plays exactly once -
+# which is why the walk stopped dead a second in while the player kept
+# moving. Idle, run and talk are set to loop; jump and defeat are
+# one-shots and stay that way.
 static func animation_set(player: AnimationPlayer) -> Dictionary:
 	var out := {
 		"idle": animation_named(player, IDLE_WORDS),
@@ -521,4 +570,25 @@ static func animation_set(player: AnimationPlayer) -> Dictionary:
 		out["idle"] = out["talk"]
 	if str(out["talk"]) == "":
 		out["talk"] = out["idle"]
+
+	var looping: Array[String] = ["idle", "run", "talk"]
+	for key in looping:
+		set_looping(player, str(out[key]), true)
+
 	return out
+
+
+static func set_looping(player: AnimationPlayer, anim_name: String, looping: bool) -> void:
+	if player == null or anim_name == "":
+		return
+	if not player.has_animation(anim_name):
+		return
+
+	var animation := player.get_animation(anim_name)
+	if animation == null:
+		return
+
+	if looping:
+		animation.loop_mode = Animation.LOOP_LINEAR
+	else:
+		animation.loop_mode = Animation.LOOP_NONE

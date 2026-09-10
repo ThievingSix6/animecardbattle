@@ -62,6 +62,15 @@ func _build() -> void:
 	_currency.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top.add_child(_currency)
 
+	# The same way in as every 2D screen has, so settings is never more
+	# than one press away wherever the player is standing.
+	var cog := UI.button("⚙", _open_settings, Vector2(46, 44))
+	cog.tooltip_text = "Settings"
+	top.add_child(cog)
+
+	if Settings.dev_mode:
+		top.add_child(UI.pill("DEV", Design.DANGER))
+
 	# Controls hint
 	var hint := UI.caption(_controls_hint())
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -112,6 +121,13 @@ func _on_currency(_gems: int, _gold: int) -> void:
 
 func _refresh_currency() -> void:
 	_currency.text = "💎 " + Fmt.compact(GameState.gems) + "    🪙 " + Fmt.compact(GameState.gold)
+
+
+func _open_settings() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Back out of settings returns here, not to the 2D main menu.
+	Routes.settings_return = get_tree().current_scene.scene_file_path
+	get_tree().change_scene_to_file(Routes.SETTINGS)
 
 
 func _leave() -> void:

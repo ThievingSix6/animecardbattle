@@ -131,6 +131,13 @@ func _build_environment() -> void:
 	env.fog_light_color = Color(str(zone["fog"]))
 	env.fog_density = float(zone["fog_density"])
 
+	# THE reason the sky was a flat colour. fog_sky_affect defaults to
+	# 1.0, and the sky sits at infinite depth, so exponential fog
+	# resolves to 100% at that distance and paints the entire sky in
+	# fog_light_color - panorama, stars, gradient and all. Zero here
+	# leaves the sky alone; the fog still does its job on geometry.
+	env.fog_sky_affect = 0.0
+
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)

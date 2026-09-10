@@ -10,8 +10,11 @@ extends CharacterBody3D
 # the cursor.
 # =========================================================
 
-const SPEED := 8.5
-const SPRINT_MULT := 2.1
+const SPEED := 9.5
+const SPRINT_MULT := 2.6
+# Developer mode gets a serious boost, because crossing a square
+# kilometre to check one building otherwise takes two minutes.
+const DEV_SPRINT_MULT := 7.0
 const ACCEL := 12.0
 const JUMP_VELOCITY := 5.2
 const GRAVITY := 18.0
@@ -228,7 +231,10 @@ func _physics_process(delta: float) -> void:
 
 	var speed := SPEED
 	if Input.is_action_pressed("acl_sprint"):
-		speed *= SPRINT_MULT
+		if Settings.dev_mode:
+			speed *= DEV_SPRINT_MULT
+		else:
+			speed *= SPRINT_MULT
 
 	var target := direction * speed
 	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta * speed)

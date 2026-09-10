@@ -36,6 +36,22 @@ var boy_defeated := false
 var boy_just_lost := false
 
 
+# --- Developer shortcuts -------------------------------------------
+#
+# Deliberately here rather than in the UI: they change real state, and
+# the settings screen should only be pressing buttons.
+
+func dev_set_floor(floor_number: int) -> void:
+	highest_floor = clampi(floor_number, 0, Config.MAX_FLOOR)
+	EventBus.toast("Highest floor set to %d." % highest_floor, "info")
+
+
+func dev_unlock_all() -> void:
+	highest_floor = Config.MAX_FLOOR
+	gauntlet_best = Gauntlet.WAVES
+	EventBus.toast("Every floor unlocked.", "success")
+
+
 func queue_floor(floor_number: int) -> void:
 	pending_mode = "floor"
 	pending_floor = floor_number
@@ -140,7 +156,13 @@ func talent_effect_text(talent: String) -> String:
 
 # ---------------- TOWER ----------------
 
+# Developer mode opens the whole campaign at once, which is the single
+# switch that lets the late zones be walked into and looked at. Zone
+# select, the 3D stage pads and the portal's travel menu all ask this
+# same question, so they all follow from it.
 func is_unlocked(floor_number: int) -> bool:
+	if Settings.dev_mode:
+		return true
 	return floor_number <= highest_floor + 1
 
 
