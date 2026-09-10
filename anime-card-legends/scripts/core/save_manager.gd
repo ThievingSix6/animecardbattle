@@ -86,8 +86,8 @@ static func migrate_legacy() -> void:
 const CARD_FIELDS: Array[String] = [
 	"card_id", "card_name", "description", "faction", "element", "role", "origin_tag",
 	"rarity", "modifier", "level", "max_level", "attack", "defense", "health", "speed",
-	"crit_chance", "crit_damage", "basic_ability", "passive_ability", "ultimate_ability",
-	"basic_target_mode", "ultimate_target_mode", "passive_type", "passive_chance", "passive_value",
+	"crit_chance", "crit_damage", "basic_ability", "ultimate_ability",
+	"basic_target_mode", "ultimate_target_mode", "skill_id",
 	"stars", "max_stars", "experience", "sell_value", "upgrade_cost", "obtained", "locked",
 ]
 

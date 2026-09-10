@@ -78,23 +78,6 @@ const ABILITIES := {
 	},
 }
 
-const PASSIVE_NAMES: Array[String] = [
-	"Unbreakable Wall", "Killing Intent", "Sovereign's Vigil", "Chilling Aura", "Steadfast Tune",
-	"Eager Novice", "Steady Stance", "Radiant Precision", "Dawn's Blessing", "Burning Resolve",
-]
-
-const PASSIVES_BY_ROLE := {
-	"Tank": ["guardian_block_heal"],
-	"DPS": ["lifesteal"],
-	"Assassin": ["lifesteal"],
-	"Healer": ["energy_surge"],
-	"Support": ["energy_surge"],
-}
-
-const PASSIVE_ODDS := {
-	"Common": 0.0, "Uncommon": 0.10, "Rare": 0.25, "Epic": 0.45,
-	"Legendary": 0.75, "Mythic": 1.0, "Secret": 1.0, "Awakened": 1.0,
-}
 
 
 # The opening hand. Seeded per name so a starter rolls identical stats on
@@ -131,7 +114,7 @@ static func build_starters() -> Array[CardData]:
 		var options: Dictionary = ABILITIES.get(role, ABILITIES["DPS"])
 		card.basic_ability = options["basic"][rng.randi() % options["basic"].size()]
 		card.ultimate_ability = options["ult"][rng.randi() % options["ult"].size()]
-		card.passive_ability = PASSIVE_NAMES[rng.randi() % PASSIVE_NAMES.size()]
+		card.skill_id = Skills.pick_for(role, rarity, rng)
 		card.basic_target_mode = "active"
 		card.ultimate_target_mode = "active"
 
@@ -177,7 +160,6 @@ static func generate_one(used_names: Dictionary) -> CardData:
 	_apply_stats(card, rarity, role)
 	_apply_abilities(card, role)
 	_apply_targeting(card, role)
-	_apply_passive(card, role, rarity)
 	return card
 
 
@@ -224,7 +206,7 @@ static func _apply_abilities(card: CardData, role: String) -> void:
 	var options: Dictionary = ABILITIES.get(role, ABILITIES["DPS"])
 	card.basic_ability = options["basic"][randi() % options["basic"].size()]
 	card.ultimate_ability = options["ult"][randi() % options["ult"].size()]
-	card.passive_ability = PASSIVE_NAMES[randi() % PASSIVE_NAMES.size()]
+	card.skill_id = Skills.pick_for(role, card.rarity)
 
 
 static func _apply_targeting(card: CardData, role: String) -> void:
@@ -246,22 +228,3 @@ static func _apply_targeting(card: CardData, role: String) -> void:
 				card.ultimate_target_mode = "aoe"
 
 
-static func _apply_passive(card: CardData, role: String, rarity: String) -> void:
-	if randf() > PASSIVE_ODDS.get(rarity, 0.0):
-		return
-
-	var options: Array = PASSIVES_BY_ROLE.get(role, [])
-	if options.is_empty():
-		return
-
-	card.passive_type = options[randi() % options.size()]
-	match card.passive_type:
-		"guardian_block_heal":
-			card.passive_chance = randf_range(0.12, 0.30)
-			card.passive_value = randf_range(0.12, 0.30)
-		"lifesteal":
-			card.passive_chance = 1.0
-			card.passive_value = randf_range(0.10, 0.25)
-		"energy_surge":
-			card.passive_chance = 1.0
-			card.passive_value = randf_range(5, 15)

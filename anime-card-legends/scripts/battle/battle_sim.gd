@@ -8,13 +8,18 @@ extends RefCounted
 #
 # Contains zero UI code, which makes the combat rules testable and
 # lets the presentation change without touching balance.
+#
+# Skills hook into named points in the flow (entry, turn start,
+# outgoing and incoming damage, kills, deaths). This file owns
+# sequencing; SkillEffects owns behaviour.
 # =========================================================
 
 signal attack_performed(attacker: Combatant, target: Combatant, damage: int, kind: String)
 signal ability_used(user: Combatant, ability: String, targets: Array, damage: int, kind: String)
-signal passive_triggered(source: Combatant, kind: String, amount: int, note: String)
+signal skill_triggered(source: Combatant, skill: String, note: String, amount: int)
 signal healed(target: Combatant, amount: int)
 signal combatant_died(who: Combatant)
+signal combatant_summoned(owner: Combatant, who: Combatant)
 signal actives_changed(player_index: int, enemy_index: int)
 signal battle_ended(player_won: bool)
 
@@ -23,6 +28,9 @@ var enemies: Array[Combatant] = []
 var player_index := 0
 var enemy_index := 0
 var running := false
+var turn := 0
+
+var _entered: Dictionary = {}
 
 
 func setup(player_cards: Array, enemy_cards: Array) -> void:
@@ -34,6 +42,8 @@ func setup(player_cards: Array, enemy_cards: Array) -> void:
 		enemies.append(Combatant.new(enemy_cards[i], "enemy", i))
 	player_index = 0
 	enemy_index = 0
+	turn = 0
+	_entered.clear()
 	running = true
 
 
@@ -77,6 +87,108 @@ func any_alive(list: Array[Combatant]) -> bool:
 	return false
 
 
+# --- helpers used by skills -------------------------------------------
+
+func allies_of(unit: Combatant) -> Array[Combatant]:
+	return team(unit.side)
+
+
+func enemies_of(unit: Combatant) -> Array[Combatant]:
+	return opposing(unit.side)
+
+
+func active_enemy(unit: Combatant) -> Combatant:
+	var list := opposing(unit.side)
+	var idx := advance(list, 0)
+	if idx == -1:
+		return null
+	return list[idx]
+
+
+func lowest_hp_ally(unit: Combatant, include_self: bool) -> Combatant:
+	var best: Combatant = null
+	for a in team(unit.side):
+		if not a.alive:
+			continue
+		if not include_self and a.id() == unit.id():
+			continue
+		if best == null or a.hp_ratio() < best.hp_ratio():
+			best = a
+	return best
+
+
+func strongest_ally(unit: Combatant, include_self: bool) -> Combatant:
+	var best: Combatant = null
+	for a in team(unit.side):
+		if not a.alive:
+			continue
+		if not include_self and a.id() == unit.id():
+			continue
+		if best == null or a.attack_power() > best.attack_power():
+			best = a
+	return best
+
+
+func next_ally(unit: Combatant) -> Combatant:
+	var list := team(unit.side)
+	for i in range(unit.index + 1, list.size()):
+		if list[i].alive:
+			return list[i]
+	return null
+
+
+func note(source: Combatant, text: String, amount: int = 0) -> void:
+	var label := Skills.display_name(source.data.skill_id)
+	if label == "":
+		label = "Passive"
+	skill_triggered.emit(source, label, text, amount)
+
+
+# --- skill dispatch ----------------------------------------------------
+
+func _ctx(unit: Combatant) -> SkillCtx:
+	return SkillCtx.new(self, unit)
+
+
+func _fire(hook: String, unit: Combatant, ctx: SkillCtx) -> SkillCtx:
+	var skill_id := unit.data.skill_id
+	if skill_id == "" or not Skills.has(skill_id):
+		return ctx
+	if not unit.alive and hook != "death":
+		return ctx
+
+	match hook:
+		"entry":
+			SkillEffects.entry(skill_id, ctx)
+		"turn_start":
+			SkillEffects.turn_start(skill_id, ctx)
+		"outgoing":
+			SkillEffects.outgoing(skill_id, ctx)
+		"incoming":
+			SkillEffects.incoming(skill_id, ctx)
+		"dealt":
+			SkillEffects.dealt(skill_id, ctx)
+		"taken":
+			SkillEffects.taken(skill_id, ctx)
+		"lethal":
+			SkillEffects.lethal(skill_id, ctx)
+		"kill":
+			SkillEffects.kill(skill_id, ctx)
+		"death":
+			SkillEffects.death(skill_id, ctx)
+		"ally_death":
+			SkillEffects.ally_death(skill_id, ctx)
+	return ctx
+
+
+func _fire_team(hook: String, list: Array[Combatant]) -> void:
+	var snapshot := list.duplicate()
+	for c in snapshot:
+		if not c.alive:
+			continue
+		_fire(hook, c, _ctx(c))
+
+
 # --- Round loop ---------------------------------------------------
 
 # Advances the lanes and reports who acts, in order. The view drives
@@ -85,6 +197,7 @@ func prepare_round() -> Array[String]:
 	if not running:
 		return []
 
+	turn += 1
 	player_index = advance(players, player_index)
 	enemy_index = advance(enemies, enemy_index)
 
@@ -95,13 +208,54 @@ func prepare_round() -> Array[String]:
 		_finish(true)
 		return []
 
+	var player := players[player_index]
+	var enemy := enemies[enemy_index]
+
+	# Entry hooks fire once, the first time a card reaches the front.
+	var front: Array[Combatant] = [player, enemy]
+	for c in front:
+		if _entered.has(c.id()):
+			continue
+		_entered[c.id()] = true
+		_fire("entry", c, _ctx(c))
+
+	_upkeep()
+	if not _check_end():
+		return []
+
 	actives_changed.emit(player_index, enemy_index)
 
-	var player_first: bool = players[player_index].data.speed >= enemies[enemy_index].data.speed
 	var order: Array[String] = ["enemy", "player"]
-	if player_first:
+	if player.speed_value() >= enemy.speed_value():
 		order = ["player", "enemy"]
 	return order
+
+
+# Damage over time, buff expiry, summon lifespans, per-turn skills.
+func _upkeep() -> void:
+	var everyone: Array[Combatant] = []
+	everyone.append_array(players)
+	everyone.append_array(enemies)
+
+	for c in everyone:
+		if not c.alive:
+			continue
+
+		var dot := c.tick_durations()
+		if dot > 0:
+			var died := c.take_damage(dot)
+			skill_triggered.emit(c, "Damage over time",
+				"%s suffers %d from lingering wounds" % [c.data.card_name, dot], dot)
+			if died:
+				_on_death(c, null)
+
+		if c.summoned and c.alive:
+			if c.bump("lifespan", -1) <= 0:
+				c.alive = false
+				combatant_died.emit(c)
+
+	_fire_team("turn_start", players)
+	_fire_team("turn_start", enemies)
 
 
 func take_turn(side: String) -> void:
@@ -127,30 +281,28 @@ func take_turn(side: String) -> void:
 	var attacker := attackers[attacker_idx]
 	var target := defenders[defender_idx]
 
-	# Basic attack, unless a guardian intercepts it.
-	if not _try_guardian(defenders, target):
-		var damage := compute_damage(attacker.data.attack, target.data.defense)
-		_deal(attacker, target, damage, "basic")
-		attack_performed.emit(attacker, target, damage, "basic")
+	if attacker.stun_turns > 0:
+		skill_triggered.emit(attacker, "Stunned",
+			"%s is stunned and loses the turn" % attacker.data.card_name, 0)
+		return
+
+	_strike(attacker, target, compute_damage(attacker.attack_power(), target.defense_power()), "basic")
 
 	attacker.attack_count += 1
-	var energy := Config.ENERGY_PER_ATTACK
-	if attacker.data.passive_type == "energy_surge":
-		energy += int(attacker.data.passive_value)
-	attacker.gain_energy(energy)
+	attacker.gain_energy(Config.ENERGY_PER_ATTACK)
 
 	if not _check_end():
 		return
 
 	# Basic ability on a cadence.
-	if attacker.attack_count >= Config.BASIC_ABILITY_EVERY:
+	if attacker.attack_count >= Config.BASIC_ABILITY_EVERY and attacker.silence_turns <= 0:
 		attacker.attack_count = 0
 		_use_ability(attacker, defenders, false)
 		if not _check_end():
 			return
 
 	# Ultimate at full energy.
-	if attacker.alive and attacker.energy >= Config.ENERGY_MAX:
+	if attacker.alive and attacker.energy >= Config.ENERGY_MAX and attacker.silence_turns <= 0:
 		attacker.energy = 0
 		_use_ability(attacker, defenders, true)
 		_check_end()
@@ -169,19 +321,17 @@ func _use_ability(user: Combatant, defenders: Array[Combatant], ultimate: bool) 
 	if targets.is_empty():
 		return
 
-	var damage := int(user.data.attack * multiplier)
+	var base := int(float(user.attack_power()) * multiplier)
 	var struck: Array = []
 	for t in targets:
-		if _try_guardian(defenders, t):
-			continue
-		_deal(user, t, damage, "ability")
-		struck.append(t)
+		if _strike(user, t, base, "ability"):
+			struck.append(t)
 
 	if not struck.is_empty():
 		var kind := "basic"
 		if ultimate:
 			kind = "ultimate"
-		ability_used.emit(user, ability_name, struck, damage, kind)
+		ability_used.emit(user, ability_name, struck, base, kind)
 
 
 func resolve_targets(defenders: Array[Combatant], mode: String) -> Array[Combatant]:
@@ -189,51 +339,146 @@ func resolve_targets(defenders: Array[Combatant], mode: String) -> Array[Combata
 	match mode:
 		"aoe":
 			for d in defenders:
-				if d.alive:
+				if d.is_targetable():
 					out.append(d)
 		"backline":
 			for i in range(defenders.size() - 1, -1, -1):
-				if defenders[i].alive:
+				if defenders[i].is_targetable():
 					out.append(defenders[i])
 					break
 		_:
-			var idx := advance(defenders, 0)
-			if idx != -1:
-				out.append(defenders[idx])
+			for d in defenders:
+				if d.is_targetable():
+					out.append(d)
+					break
 	return out
 
 
-func _deal(attacker: Combatant, target: Combatant, damage: int, _kind: String) -> void:
-	var died := target.take_damage(damage)
+# One hit, start to finish: outgoing skills, incoming skills, lethal
+# cancellation, lifesteal, and the follow-up hooks. Returns false when
+# the hit was blocked or the target could not be touched.
+func _strike(attacker: Combatant, target: Combatant, base_damage: int, kind: String) -> bool:
+	if not target.is_targetable():
+		return false
 
-	if attacker.data.passive_type == "lifesteal" and attacker.alive:
-		var healed_amount := attacker.heal(int(damage * attacker.data.passive_value))
+	var out_ctx := _ctx(attacker)
+	out_ctx.target = target
+	out_ctx.damage = base_damage
+	_fire("outgoing", attacker, out_ctx)
+
+	var damage := max(1, int(round(float(out_ctx.damage) * (1.0 + attacker.modifier("damageDealt")))))
+
+	var in_ctx := _ctx(target)
+	in_ctx.attacker = attacker
+	in_ctx.damage = damage
+	_fire("incoming", target, in_ctx)
+
+	if in_ctx.blocked:
+		skill_triggered.emit(target, "Blocked",
+			"%s blocks %s" % [target.data.card_name, attacker.data.card_name], 0)
+		return false
+
+	damage = max(1, in_ctx.damage)
+
+	if damage >= target.hp + target.shield:
+		var save_ctx := _ctx(target)
+		save_ctx.attacker = attacker
+		save_ctx.damage = damage
+		_fire("lethal", target, save_ctx)
+		if save_ctx.prevented:
+			if kind == "basic":
+				attack_performed.emit(attacker, target, target.hp, kind)
+			_after_hit(attacker, target, damage)
+			return true
+
+	var died := target.take_damage(damage)
+	if kind == "basic":
+		attack_performed.emit(attacker, target, damage, kind)
+
+	_after_hit(attacker, target, damage)
+	if died:
+		_on_death(target, attacker)
+	return true
+
+
+func _after_hit(attacker: Combatant, target: Combatant, damage: int) -> void:
+	var steal := attacker.modifier("lifesteal")
+	if steal > 0.0 and attacker.alive:
+		var healed_amount := attacker.heal(int(float(damage) * steal))
 		if healed_amount > 0:
 			healed.emit(attacker, healed_amount)
 
+	var dealt_ctx := _ctx(attacker)
+	dealt_ctx.target = target
+	dealt_ctx.damage = damage
+	_fire("dealt", attacker, dealt_ctx)
+
+	var taken_ctx := _ctx(target)
+	taken_ctx.attacker = attacker
+	taken_ctx.damage = damage
+	_fire("taken", target, taken_ctx)
+
+
+# Damage from a skill rather than an attack - skips the attack hooks.
+func direct_damage(source: Combatant, target: Combatant, amount: int, label: String) -> void:
+	if not target.alive or amount <= 0:
+		return
+	var died := target.take_damage(amount)
+	skill_triggered.emit(source, label,
+		"%s: %s takes %d" % [label, target.data.card_name, amount], amount)
 	if died:
-		combatant_died.emit(target)
+		_on_death(target, source)
 
 
-# A living, non-active ally may intercept an incoming hit entirely.
-func _try_guardian(defenders: Array[Combatant], target: Combatant) -> bool:
-	for guardian in defenders:
-		if not guardian.alive or guardian == target:
-			continue
-		if guardian.data.passive_type != "guardian_block_heal":
-			continue
-		if randf() > guardian.data.passive_chance:
-			continue
+func _on_death(who: Combatant, killer: Combatant) -> void:
+	combatant_died.emit(who)
 
-		var amount := guardian.heal(int(guardian.max_hp * guardian.data.passive_value))
-		passive_triggered.emit(guardian, "guardian_block_heal", amount,
-			"%s intercepts the blow aimed at %s" % [guardian.data.card_name, target.data.card_name])
-		return true
-	return false
+	var death_ctx := _ctx(who)
+	death_ctx.attacker = killer
+	_fire("death", who, death_ctx)
+
+	for ally in team(who.side):
+		if ally.alive and ally.id() != who.id():
+			var ally_ctx := _ctx(ally)
+			ally_ctx.other = who
+			_fire("ally_death", ally, ally_ctx)
+
+	if killer != null and killer.alive:
+		var kill_ctx := _ctx(killer)
+		kill_ctx.other = who
+		_fire("kill", killer, kill_ctx)
+
+
+# --- summons ------------------------------------------------------------
+
+func summon(owner: Combatant, minion_name: String, stat_pct: float, lifespan: int, count: int) -> void:
+	var list := team(owner.side)
+	var bonus := 1.0 + min(0.3, float(owner.count("souls")) * 0.1)
+
+	for i in count:
+		var card := CardData.new()
+		card.card_id = "%s~summon%d" % [owner.data.card_id, list.size()]
+		card.card_name = minion_name
+		card.role = owner.data.role
+		card.rarity = owner.data.rarity
+		card.element = owner.data.element
+		card.origin_tag = "summon"
+		card.basic_ability = "Strike"
+		card.ultimate_ability = "Strike"
+		card.attack = max(1, int(round(float(owner.data.attack) * stat_pct * bonus)))
+		card.defense = max(0, int(round(float(owner.data.defense) * stat_pct * bonus)))
+		card.health = max(1, int(round(float(owner.data.health) * stat_pct * bonus)))
+		card.speed = owner.data.speed
+
+		var minion := Combatant.new(card, owner.side, list.size())
+		minion.summoned = true
+		minion.counters["lifespan"] = lifespan
+		list.append(minion)
+		combatant_summoned.emit(owner, minion)
 
 
 static func compute_damage(attack: int, defense: int) -> int:
-	return max(1, attack - int(defense * Config.DEFENSE_FACTOR))
+	return max(1, attack - int(float(defense) * Config.DEFENSE_FACTOR))
 
 
 func _check_end() -> bool:

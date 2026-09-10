@@ -22,15 +22,11 @@ static func ultimate(card: CardData) -> String:
 
 
 static func passive(card: CardData) -> String:
-	match card.passive_type:
-		"guardian_block_heal":
-			return "%s chance to intercept an attack aimed at an ally, blocking it entirely and healing %s of max HP." % [
-				_pct(card.passive_chance), _pct(card.passive_value)]
-		"lifesteal":
-			return "Heals for %s of all damage dealt." % _pct(card.passive_value)
-		"energy_surge":
-			return "Generates +%d bonus energy on every hit." % int(card.passive_value)
-	return ""
+	return Skills.text_of(card.skill_id)
+
+
+static func passive_name(card: CardData) -> String:
+	return Skills.display_name(card.skill_id)
 
 
 # The line shown on the card face: prefers the ultimate, since that's

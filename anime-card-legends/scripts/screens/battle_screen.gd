@@ -80,7 +80,8 @@ func _start() -> void:
 
 	sim.attack_performed.connect(_on_attack)
 	sim.ability_used.connect(_on_ability)
-	sim.passive_triggered.connect(_on_passive)
+	sim.skill_triggered.connect(_on_skill)
+	sim.combatant_summoned.connect(_on_summoned)
 	sim.healed.connect(_on_healed)
 	sim.combatant_died.connect(_on_died)
 	sim.actives_changed.connect(_on_actives_changed)
@@ -138,13 +139,25 @@ func _on_ability(user: Combatant, ability: String, targets: Array, damage: int, 
 		color.to_html(false), user.data.card_name, verb, ability, scope, Fmt.compact(damage)])
 
 
-func _on_passive(source: Combatant, _kind: String, amount: int, note: String) -> void:
+func _on_skill(source: Combatant, skill: String, note: String, amount: int) -> void:
 	var view: BattleCard = _views.get(source)
 	if view:
 		view.refresh()
-		view.float_text("+" + Fmt.compact(amount), Design.SUCCESS)
-	_write("[color=#%s]%s (+%s HP)[/color]" % [
-		Design.SUCCESS.to_html(false), note, Fmt.compact(amount)])
+		if amount > 0:
+			view.float_text(Fmt.compact(amount), Design.rarity_color("Epic"))
+	_write("[color=#%s]\u2726 %s \u2014 %s[/color]" % [
+		Design.rarity_color("Epic").to_html(false), skill, note])
+
+
+# A summon joins the back of its owner's lane mid-battle.
+func _on_summoned(owner: Combatant, who: Combatant) -> void:
+	var row := _player_row
+	if who.side == "enemy":
+		row = _enemy_row
+	_add_view(who, row)
+	_write("[color=#%s]%s summons %s[/color]" % [
+		Design.rarity_color("Uncommon").to_html(false),
+		owner.data.card_name, who.data.card_name])
 
 
 func _on_healed(target: Combatant, amount: int) -> void:

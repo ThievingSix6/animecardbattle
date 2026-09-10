@@ -66,7 +66,6 @@ static func card_from_path(path: String) -> CardData:
 
 	_apply_stats(card, rng)
 	_apply_abilities(card, rng)
-	_apply_passive(card, rng)
 
 	return card
 
@@ -163,7 +162,7 @@ static func _apply_abilities(card: CardData, rng: RandomNumberGenerator) -> void
 	var options: Dictionary = CardGenerator.ABILITIES.get(card.role, CardGenerator.ABILITIES["DPS"])
 	card.basic_ability = options["basic"][rng.randi() % options["basic"].size()]
 	card.ultimate_ability = options["ult"][rng.randi() % options["ult"].size()]
-	card.passive_ability = CardGenerator.PASSIVE_NAMES[rng.randi() % CardGenerator.PASSIVE_NAMES.size()]
+	card.skill_id = Skills.pick_for(card.role, card.rarity, rng)
 
 	card.basic_target_mode = "active"
 	card.ultimate_target_mode = "active"
@@ -189,30 +188,6 @@ static func _apply_abilities(card: CardData, rng: RandomNumberGenerator) -> void
 		card.ultimate_target_mode = "aoe"
 
 
-static func _apply_passive(card: CardData, rng: RandomNumberGenerator) -> void:
-	var odds: float = CardGenerator.PASSIVE_ODDS.get(card.rarity, 1.0)
-	if rng.randf() > odds:
-		return
-
-	var options: Array = CardGenerator.PASSIVES_BY_ROLE.get(card.role, [])
-	if options.is_empty():
-		return
-
-	card.passive_type = options[rng.randi() % options.size()]
-	var boost := 1.0
-	if Config.rarity_index(card.rarity) >= Config.rarity_index("Secret"):
-		boost = 1.4
-
-	match card.passive_type:
-		"guardian_block_heal":
-			card.passive_chance = min(0.6, rng.randf_range(0.12, 0.30) * boost)
-			card.passive_value = min(0.6, rng.randf_range(0.12, 0.30) * boost)
-		"lifesteal":
-			card.passive_chance = 1.0
-			card.passive_value = min(0.6, rng.randf_range(0.10, 0.25) * boost)
-		"energy_surge":
-			card.passive_chance = 1.0
-			card.passive_value = rng.randf_range(5, 15) * boost
 
 
 static func _flavour(display_name: String, rarity: String, rng: RandomNumberGenerator) -> String:
