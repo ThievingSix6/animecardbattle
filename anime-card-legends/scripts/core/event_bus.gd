@@ -44,6 +44,8 @@ signal weather_tick(seconds_remaining: float)
 signal clan_activity(text: String)
 @warning_ignore("unused_signal")
 signal clan_level_changed(level: int)
+@warning_ignore("unused_signal")
+signal chat_message(author: String, text: String, from_player: bool)
 
 # UI
 @warning_ignore("unused_signal")

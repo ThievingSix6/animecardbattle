@@ -6,8 +6,12 @@ extends Screen
 # =========================================================
 
 const FEED_LIMIT := 12
+const CHAT_LIMIT := 40
 
 var _feed: VBoxContainer
+var _chat_log: VBoxContainer
+var _chat_scroll: ScrollContainer
+var _chat_input: LineEdit
 var _raid_bar: ProgressBar
 var _raid_label: Label
 
@@ -26,17 +30,20 @@ func build_content() -> void:
 	_build_banner(clan)
 	_build_raid(clan)
 	_build_perks(clan)
+	_build_chat()
 	_build_roster(clan)
 	_build_feed()
 
 	EventBus.clan_activity.connect(_on_activity)
 	EventBus.clan_level_changed.connect(_on_level_changed)
+	EventBus.chat_message.connect(_on_chat_message)
 
 
 func _exit_tree() -> void:
 	super()
 	unbind(EventBus.clan_activity, _on_activity)
 	unbind(EventBus.clan_level_changed, _on_level_changed)
+	unbind(EventBus.chat_message, _on_chat_message)
 
 
 # --- Not in a clan yet -------------------------------------------------
@@ -255,6 +262,103 @@ func _player_power() -> int:
 	for card in GameState.get_battle_team():
 		total += card.attack + card.defense + int(card.health / 4.0)
 	return total
+
+
+# --- Chat ----------------------------------------------------------------
+
+func _build_chat() -> void:
+	content.add_child(UI.section("Clan chat"))
+
+	var panel := UI.panel(Design.SURFACE, Design.S3)
+	var body := UI.vbox(Design.S3)
+	panel.add_child(body)
+
+	_chat_scroll = UI.scroll()
+	_chat_scroll.custom_minimum_size = Vector2(0, 200)
+	_chat_log = UI.vbox(Design.S1)
+	_chat_scroll.add_child(_chat_log)
+	body.add_child(_chat_scroll)
+
+	for entry in GameState.chat.history:
+		_append_message(str(entry["author"]), str(entry["text"]), bool(entry["player"]))
+
+	if GameState.chat.history.is_empty():
+		_chat_log.add_child(UI.caption("Say something — the clan is listening."))
+
+	var row := UI.hbox(Design.S2)
+
+	_chat_input = LineEdit.new()
+	_chat_input.placeholder_text = "Message the clan..."
+	_chat_input.max_length = 140
+	_chat_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_input.text_submitted.connect(_on_chat_submitted)
+	row.add_child(_chat_input)
+
+	row.add_child(UI.primary_button("Send", _send_chat, Vector2(96, 40)))
+	body.add_child(row)
+
+	content.add_child(panel)
+
+
+func _on_chat_submitted(_text: String) -> void:
+	_send_chat()
+
+
+func _send_chat() -> void:
+	if _chat_input == null:
+		return
+	var text := _chat_input.text.strip_edges()
+	if text == "":
+		return
+	_chat_input.text = ""
+	GameState.send_chat(text)
+	Audio.play("click")
+
+
+func _on_chat_message(author: String, text: String, from_player: bool) -> void:
+	_append_message(author, text, from_player)
+
+
+func _append_message(author: String, text: String, from_player: bool) -> void:
+	if _chat_log == null:
+		return
+
+	# Clear the placeholder once a real line arrives.
+	if _chat_log.get_child_count() == 1:
+		var only := _chat_log.get_child(0)
+		if only is Label and (only as Label).text.begins_with("Say something"):
+			only.queue_free()
+
+	var name_color := Design.INFO
+	if from_player:
+		name_color = Design.ACCENT
+
+	var row := UI.hbox(Design.S2)
+	var who := UI.label(author, Design.FS_SMALL, name_color)
+	who.custom_minimum_size = Vector2(120, 0)
+	row.add_child(who)
+
+	var said := UI.label(text, Design.FS_SMALL, Design.TEXT)
+	said.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	said.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(said)
+
+	_chat_log.add_child(row)
+
+	while _chat_log.get_child_count() > CHAT_LIMIT:
+		_chat_log.get_child(0).queue_free()
+
+	# Wait a frame so the container has resized before scrolling.
+	call_deferred("_scroll_chat_to_end")
+
+
+func _scroll_chat_to_end() -> void:
+	if _chat_scroll == null:
+		return
+	await get_tree().process_frame
+	var bar := _chat_scroll.get_v_scroll_bar()
+	if bar:
+		_chat_scroll.scroll_vertical = int(bar.max_value)
 
 
 # --- Activity feed ----------------------------------------------------------------

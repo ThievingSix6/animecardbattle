@@ -20,6 +20,7 @@ var progression: ProgressionSystem
 var weather: WeatherSystem
 var equipment: EquipmentSystem
 var clan: ClanSystem
+var chat: ChatSystem
 
 var wallet := {"gems": Config.START_GEMS, "gold": Config.START_GOLD}
 var active_slot := -1
@@ -42,6 +43,7 @@ func _build_systems() -> void:
 	weather = WeatherSystem.new()
 	equipment = EquipmentSystem.new()
 	clan = ClanSystem.new()
+	chat = ChatSystem.new()
 	gacha = GachaSystem.new(
 		collection,
 		func(): return effective_luck(),
@@ -58,7 +60,7 @@ func open_slot(slot: int) -> void:
 	wallet = {"gems": Config.START_GEMS, "gold": Config.START_GOLD}
 	_build_systems()
 
-	if not SaveManager.load_into(slot, wallet, collection, progression, weather, gacha, equipment, clan):
+	if not SaveManager.load_into(slot, wallet, collection, progression, weather, gacha, equipment, clan, chat):
 		_grant_starting_cards()
 		save_now()
 
@@ -92,6 +94,7 @@ func _process(delta: float) -> void:
 		return
 	weather.update()
 	_tick_clan(delta)
+	_tick_chat(delta)
 	_tick_auto_roll(delta)
 	_tick_save(delta)
 
@@ -120,6 +123,44 @@ func _tick_clan(delta: float) -> void:
 		EventBus.clan_level_changed.emit(clan.level)
 		EventBus.toast("Clan reached level %d!" % clan.level, "success")
 		request_save()
+
+
+# The clan room talks among itself, and answers the player.
+func _tick_chat(delta: float) -> void:
+	if chat == null or clan == null or not clan.founded:
+		return
+	for entry in chat.update(delta, clan.members, _chat_context()):
+		EventBus.chat_message.emit(
+			str(entry["author"]), str(entry["text"]), bool(entry["player"]))
+
+
+# What the roster is allowed to talk about: real state only.
+func _chat_context() -> Dictionary:
+	var newest := ""
+	var owned := collection.get_all()
+	if not owned.is_empty():
+		newest = owned[owned.size() - 1].card_name
+
+	var boss := ""
+	if clan.raid_active:
+		boss = clan.raid_boss
+
+	return {
+		"raid_boss": boss,
+		"clan_level": clan.level,
+		"newest_card": newest,
+	}
+
+
+func send_chat(text: String) -> void:
+	if chat == null or clan == null or not clan.founded:
+		return
+	var entry := chat.send(text, clan.members)
+	if entry.is_empty():
+		return
+	EventBus.chat_message.emit(
+		str(entry["author"]), str(entry["text"]), true)
+	request_save()
 
 
 # Clan XP earned by the player. Routed through here so every source
@@ -164,7 +205,7 @@ func effective_luck() -> float:
 # The clan's roll-speed perk shortens the gap between auto-rolls.
 func effective_roll_interval() -> float:
 	var interval := progression.roll_interval()
-	return max(Config.ROLL_INTERVAL_MIN, interval * (1.0 - clan_perk("speed")))
+	return maxf(Config.ROLL_INTERVAL_MIN, interval * (1.0 - clan_perk("speed")))
 
 
 # ---------------- WALLET ----------------
@@ -329,7 +370,7 @@ func _tick_save(delta: float) -> void:
 func save_now() -> void:
 	if not has_active_slot():
 		return
-	SaveManager.save(active_slot, wallet, collection, progression, weather, gacha, equipment, clan)
+	SaveManager.save(active_slot, wallet, collection, progression, weather, gacha, equipment, clan, chat)
 
 
 func _notification(what: int) -> void:

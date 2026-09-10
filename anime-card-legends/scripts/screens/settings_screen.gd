@@ -38,16 +38,7 @@ func build_content() -> void:
 
 	content.add_child(audio_panel)
 
-	var missing := _missing_audio()
-	if not missing.is_empty():
-		var warning := UI.accent_panel(Design.INFO, Design.S3)
-		var warning_body := UI.vbox(Design.S1)
-		warning_body.add_child(UI.label("Audio files not found", Design.FS_BODY, Design.INFO))
-		warning_body.add_child(UI.caption(
-			"Drop these into res://audio/ as .ogg, .wav or .mp3 — the names hook themselves up:"))
-		warning_body.add_child(UI.caption("  " + ", ".join(missing)))
-		warning.add_child(warning_body)
-		content.add_child(warning)
+	content.add_child(_asset_report())
 
 	# --- Gameplay ---
 
@@ -191,15 +182,114 @@ func _refresh_labels() -> void:
 		_speed_value.text = Settings.battle_speed_label()
 
 
-# Which of the expected audio files are absent, so the screen can say so
-# rather than leaving the player wondering why sliders do nothing.
-func _missing_audio() -> Array[String]:
+# --- Asset report ------------------------------------------------------
+#
+# What the game can actually see on disk. Both the card art and the icon
+# systems match on exact filenames, so a file that is present but named
+# differently loads nothing - and without this panel that failure is
+# completely silent.
+
+func _asset_report() -> Control:
+	content.add_child(UI.section("Assets"))
+
+	var panel := UI.panel(Design.SURFACE, Design.S4)
+	var body := UI.vbox(Design.S3)
+	panel.add_child(body)
+
+	body.add_child(_card_art_row())
+	body.add_child(UI.separator())
+	body.add_child(_icon_row())
+	body.add_child(UI.separator())
+	body.add_child(_audio_row())
+
+	return panel
+
+
+func _card_art_row() -> Control:
+	var files := CardArt.list_files()
+	var box := UI.vbox(Design.S1)
+
+	if files.is_empty():
+		box.add_child(UI.label("Card art: none found", Design.FS_BODY, Design.DANGER))
+		box.add_child(UI.caption(
+			"Drop images into res://art/cards/. The filename becomes the card "
+			+ "name: ashen_knight.png -> \"Ashen Knight\". Until then the roster "
+			+ "falls back to procedural names."))
+		return box
+
+	box.add_child(UI.label("Card art: %d file(s) -> %d card(s)" % [
+		files.size(), files.size()], Design.FS_BODY, Design.SUCCESS))
+
+	# Show what the filenames actually resolved to, so a bad name is obvious.
+	var sample: Array[String] = []
+	var shown := mini(6, files.size())
+	for i in shown:
+		var card := CardLibrary.card_from_path(files[i])
+		if card != null:
+			sample.append("%s (%s)" % [card.card_name, card.rarity])
+	box.add_child(UI.caption("Reads as: " + ", ".join(sample)))
+	if files.size() > shown:
+		box.add_child(UI.caption("...and %d more" % (files.size() - shown)))
+
+	return box
+
+
+func _icon_row() -> Control:
+	var found: Array[String] = []
+	var missing: Array[String] = []
+	for key in Icons.EMOJI_FALLBACK.keys():
+		if Icons.has(str(key)):
+			found.append(str(key))
+		else:
+			missing.append(str(key))
+
+	var box := UI.vbox(Design.S1)
+	var total := found.size() + missing.size()
+
+	var colour := Design.DANGER
+	if found.size() == total:
+		colour = Design.SUCCESS
+	elif found.size() > 0:
+		colour = Design.ACCENT
+	box.add_child(UI.label("Icons: %d of %d matched" % [found.size(), total],
+		Design.FS_BODY, colour))
+
+	if missing.is_empty():
+		return box
+
+	box.add_child(UI.caption(
+		"Icons load by exact filename from res://art/icons/. These are still "
+		+ "using emoji because no file of that name was found:"))
+	box.add_child(UI.caption("  " + ", ".join(missing) + "  (.png or .svg)"))
+	return box
+
+
+func _audio_row() -> Control:
 	var expected: Array[String] = [
 		"music_menu", "music_lobby", "music_battle",
-		"click", "hit", "ultimate", "victory", "defeat",
+		"click", "hit", "ultimate", "victory", "defeat", "coin", "summon", "levelup",
 	]
 	var missing: Array[String] = []
 	for key in expected:
 		if not Audio.has_sound(key):
 			missing.append(key)
-	return missing
+
+	var box := UI.vbox(Design.S1)
+	var found_count := expected.size() - missing.size()
+
+	var colour := Design.DANGER
+	if missing.is_empty():
+		colour = Design.SUCCESS
+	elif found_count > 0:
+		colour = Design.ACCENT
+	box.add_child(UI.label("Audio: %d of %d matched" % [found_count, expected.size()],
+		Design.FS_BODY, colour))
+
+	if missing.is_empty():
+		return box
+
+	box.add_child(UI.caption(
+		"Sounds load by exact filename from res://audio/ (.ogg, .wav or .mp3). "
+		+ "Not found:"))
+	box.add_child(UI.caption("  " + ", ".join(missing)))
+	return box

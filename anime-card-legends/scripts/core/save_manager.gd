@@ -107,7 +107,7 @@ static func dict_to_card(d: Dictionary) -> CardData:
 	return card
 
 
-static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem) -> bool:
+static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem, chat: ChatSystem) -> bool:
 	var cards := []
 	for c in collection.owned.values():
 		cards.append(card_to_dict(c))
@@ -128,6 +128,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"items_owned": equipment.owned,
 		"items_equipped": equipment.equipped,
 		"clan": clan.to_dict(),
+		"chat": chat.to_array(),
 		"weather": {
 			"active": weather.active,
 			"ends_at": weather.ends_at,
@@ -145,7 +146,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 	return true
 
 
-static func load_into(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem) -> bool:
+static func load_into(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem, chat: ChatSystem) -> bool:
 	if not slot_exists(slot):
 		return false
 
@@ -205,6 +206,8 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 	var clan_data = parsed.get("clan", {})
 	if typeof(clan_data) == TYPE_DICTIONARY:
 		clan.from_dict(clan_data)
+
+	chat.from_array(parsed.get("chat", []))
 
 	var w = parsed.get("weather", {})
 	if typeof(w) == TYPE_DICTIONARY:
