@@ -10,7 +10,9 @@ const MENU: Array[Dictionary] = [
 	{"label": "Team",       "icon": "🛡️", "route": Routes.TEAM},
 	{"label": "Character",  "icon": "💍", "route": Routes.CHARACTER},
 	{"label": "Talents",    "icon": "⭐", "route": Routes.TALENTS},
-	{"label": "Tower",      "icon": "🗼", "route": Routes.TOWER},
+	{"label": "Campaign",   "icon": "🗼", "route": Routes.CAMPAIGN},
+	{"label": "Clan",       "icon": "🏰", "route": Routes.CLAN},
+	{"label": "Settings",   "icon": "⚙️", "route": Routes.SETTINGS},
 ]
 
 
@@ -70,7 +72,8 @@ func _switch_profile() -> void:
 
 func _navigate(route: String) -> void:
 	if route == "battle":
-		GameState.progression.pending_floor = GameState.progression.highest_floor + 1
+		var next_floor: int = GameState.progression.highest_floor + 1
+		GameState.progression.pending_floor = min(next_floor, Config.MAX_FLOOR)
 		Routes.go(self, Routes.BATTLE)
 	else:
 		Routes.go(self, route)

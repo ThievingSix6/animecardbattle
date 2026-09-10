@@ -28,17 +28,15 @@ extends Resource
 
 @export_category("Abilities")
 @export var basic_ability: String = ""
-@export var passive_ability: String = ""
 @export var ultimate_ability: String = ""
 
 @export_category("Targeting")
 @export_enum("active", "backline", "aoe") var basic_target_mode: String = "active"
 @export_enum("active", "backline", "aoe") var ultimate_target_mode: String = "active"
 
-@export_category("Passive Mechanics")
-@export var passive_type: String = ""
-@export_range(0.0, 1.0, 0.01) var passive_chance: float = 0.0
-@export_range(0.0, 2.0, 0.01) var passive_value: float = 0.0
+@export_category("Passive Skill")
+# Id into the skill library (scripts/core/skills.gd); "" means none.
+@export var skill_id: String = ""
 
 @export_category("Progression")
 @export var stars: int = 1

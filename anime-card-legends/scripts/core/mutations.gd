@@ -105,7 +105,7 @@ static func roll(luck: float = 0.0) -> String:
 
 
 # Produces the mutated variant of a template. Mutated copies are separate
-# collection entries, so a Gold Kael and a plain Kael coexist.
+# collection entries, so a Gold copy and a plain copy coexist.
 static func apply(template: CardData, mutation_id: String) -> CardData:
 	if not is_mutated(mutation_id):
 		return template

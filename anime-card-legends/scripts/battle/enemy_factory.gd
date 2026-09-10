@@ -2,27 +2,19 @@ class_name EnemyFactory
 extends RefCounted
 
 # =========================================================
-# Builds the opposing team for a tower floor. Separated from both
-# the simulation and the view so encounter design can evolve on its own.
+# Builds the opposing team for a floor. Separated from both the
+# simulation and the view so encounter design can evolve on its own.
+#
+# Enemy identity comes from the campaign zone that owns the floor, so a
+# zone's roster is declared in exactly one place (scripts/core/campaign.gd)
+# and the 3D world, the zone select, and the fight always agree.
 # =========================================================
-
-const TIERS: Array[Dictionary] = [
-	{"upto": 9,   "element": "",      "boss": "Golem Warlord", "names": ["Training Golem", "Rusted Automaton", "Stone Sentinel"], "roles": ["Tank", "DPS"]},
-	{"upto": 19,  "element": "Earth", "boss": "Alpha Direwolf", "names": ["Feral Wolf", "Bandit Scout", "Marsh Lurker"], "roles": ["DPS", "Assassin", "Support"]},
-	{"upto": 29,  "element": "Dark",  "boss": "The Bandit Kingpin", "names": ["Bandit Raider", "Rogue Mercenary", "Cutthroat"], "roles": ["DPS", "Assassin", "Tank"]},
-	{"upto": 39,  "element": "Dark",  "boss": "High Cultist Mordrai", "names": ["Dark Cultist", "Shadow Acolyte", "Void Priest"], "roles": ["DPS", "Healer", "Support"]},
-	{"upto": 49,  "element": "Light", "boss": "The Ancient Titan", "names": ["Ancient Guardian", "Fallen Knight", "Wraith Sentinel"], "roles": ["Tank", "DPS", "Assassin"]},
-	{"upto": 9999,"element": "Dark",  "boss": "The Tower's Heart", "names": ["Tower Wraith", "Voidbound Horror", "Nameless Sentinel"], "roles": ["Tank", "DPS", "Assassin"]},
-]
 
 const BASE := {"attack": 18.0, "defense": 20.0, "health": 200.0, "speed": 8.0}
 
 
 static func tier_for(floor_number: int) -> Dictionary:
-	for tier in TIERS:
-		if floor_number <= tier["upto"]:
-			return tier
-	return TIERS[-1]
+	return Campaign.zone_for_floor(floor_number)
 
 
 static func build_floor(floor_number: int, progression: ProgressionSystem) -> Array[CardData]:
@@ -34,6 +26,36 @@ static func build_floor(floor_number: int, progression: ProgressionSystem) -> Ar
 	for i in count:
 		var is_boss: bool = (i == count - 1) and progression.is_boss_floor(floor_number)
 		out.append(_build(tier, floor_number, i, scale, is_boss))
+	return out
+
+
+# The clan raid boss: one enormous target, scaled by clan level. Its HP
+# here is only what the player fights through in a single sortie - the
+# shared pool the whole clan chips away at lives on ClanSystem.
+static func build_raid(clan_level: int, boss_name: String) -> Array[CardData]:
+	var scale := 1.0 + float(clan_level) * 0.45
+
+	var boss := CardData.new()
+	boss.card_id = "raid_boss"
+	boss.card_name = boss_name
+	boss.role = "Tank"
+	boss.rarity = "Mythic"
+	boss.modifier = "Normal"
+	boss.element = "Dark"
+	boss.origin_tag = "raid"
+	boss.basic_ability = "Sunder"
+	boss.ultimate_ability = "World Ender"
+	boss.basic_target_mode = "aoe"
+	boss.ultimate_target_mode = "aoe"
+	boss.skill_id = "ironhide"
+
+	var shape: Dictionary = Config.ROLE_STATS["Tank"]
+	boss.attack  = max(5,  int(BASE["attack"]  * scale * 1.8 * shape["attack"]))
+	boss.defense = max(3,  int(BASE["defense"] * scale * 1.8 * shape["defense"]))
+	boss.health  = max(60, int(BASE["health"]  * scale * 9.0 * shape["health"]))
+	boss.speed   = max(4,  int(BASE["speed"]   * scale * shape["speed"]))
+
+	var out: Array[CardData] = [boss]
 	return out
 
 

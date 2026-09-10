@@ -7,11 +7,10 @@ extends RefCounted
 # Drop images into res://art/cards/ and every card is assigned one
 # deterministically (the same card always shows the same art). To pin
 # a specific image to a specific card, name the file after the card:
-# "Ignis, Bound Flamewarden" -> ignis_bound_flamewarden.png
+# "Ashen Knight, the Unbroken" -> ashen_knight_the_unbroken.png
 # =========================================================
 
 const FOLDER := "res://art/cards/"
-const FALLBACK := "res://art/kael.jpg"
 const EXTENSIONS: Array[String] = ["png", "jpg", "jpeg", "webp"]
 
 static var _files: Array[String] = []
@@ -87,16 +86,13 @@ static func _resolve(card: CardData) -> Texture2D:
 		var index: int = abs(hash(card.card_id)) % _files.size()
 		return load(_files[index])
 
-	# 3. Last resort placeholder.
-	if ResourceLoader.exists(FALLBACK):
-		return load(FALLBACK)
+	# 3. No art supplied: the card frame renders on its own.
 	return null
 
 
-# Only tint when we're reusing one placeholder image for everything.
+# With no artwork the frame is bare, so tint it by element to keep cards
+# visually distinguishable.
 static func tint_for(card: CardData) -> Color:
 	if has_custom_art():
-		return Color.WHITE
-	if card.card_name.begins_with("Kael"):
 		return Color.WHITE
 	return Design.element_color(card.element).lerp(Color.WHITE, 0.35)

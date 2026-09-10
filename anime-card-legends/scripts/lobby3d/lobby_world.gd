@@ -14,7 +14,7 @@ const BUILDINGS: Array[Dictionary] = [
 	{"name": "Card Vault",    "icon": "🎴", "route": Routes.COLLECT, "pos": Vector3(-14, 0, -10), "color": Color("#3b82f6")},
 	{"name": "Summon Altar",  "icon": "🔮", "route": Routes.PACKS,   "pos": Vector3(0, 0, -18),   "color": Color("#a855f7")},
 	{"name": "Talent Shrine", "icon": "⭐", "route": Routes.TALENTS, "pos": Vector3(14, 0, -10),  "color": Color("#f5a623")},
-	{"name": "Tower Gate",    "icon": "🗼", "route": Routes.TOWER,   "pos": Vector3(16, 0, 8),    "color": Color("#ef4444")},
+	{"name": "Campaign Gate", "icon": "🗼", "route": Routes.CAMPAIGN, "pos": Vector3(16, 0, 8),   "color": Color("#ef4444")},
 	{"name": "War Camp",      "icon": "🛡️", "route": Routes.TEAM,    "pos": Vector3(-16, 0, 8),   "color": Color("#3ecf7e")},
 ]
 
@@ -343,7 +343,7 @@ func _update_proximity() -> void:
 		if closest.is_empty():
 			hud.hide_prompt()
 		else:
-			hud.show_prompt(str(closest["name"]))
+			hud.show_prompt("Press ENTER to visit " + str(closest["name"]))
 
 
 func _set_pad_active(zone: Dictionary, active: bool) -> void:

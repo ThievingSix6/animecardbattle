@@ -144,8 +144,9 @@ func _build_identity() -> Control:
 func _build_abilities(parent: VBoxContainer) -> void:
 	_ability_row(parent, "BASIC", card.basic_ability, AbilityText.basic(card))
 	_ability_row(parent, "ULTIMATE", card.ultimate_ability, AbilityText.ultimate(card))
-	if card.passive_type != "":
-		_ability_row(parent, "PASSIVE", card.passive_ability, AbilityText.passive(card))
+	if card.skill_id != "":
+		_ability_row(parent, Skills.family_label(card.skill_id).to_upper(),
+			AbilityText.passive_name(card), AbilityText.passive(card))
 
 
 func _ability_row(parent: VBoxContainer, kind: String, ability_name: String, body_text: String) -> void:

@@ -8,6 +8,8 @@ extends RefCounted
 var talents := {"speed": 0, "luck": 0, "multi": 0}
 var highest_floor := 0
 var pending_floor := 1
+var pending_zone := 0        # transient: which zone the 3D world should build
+var pending_raid := false    # transient: the next battle is the clan raid
 var roll_packs: Dictionary = {}
 
 
@@ -74,9 +76,9 @@ func stat_multiplier(floor_number: int) -> float:
 
 
 func pack_for_floor(floor_number: int) -> String:
-	if floor_number >= 45:
+	if floor_number >= 35:
 		return "boss"
-	if floor_number >= 20:
+	if floor_number >= 15:
 		return "gold"
 	return "bronze"
 
