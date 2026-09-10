@@ -200,6 +200,8 @@ func _asset_report() -> Control:
 	body.add_child(UI.separator())
 	body.add_child(_banner_row())
 	body.add_child(UI.separator())
+	body.add_child(_model_row())
+	body.add_child(UI.separator())
 	body.add_child(_icon_row())
 	body.add_child(UI.separator())
 	body.add_child(_audio_row())
@@ -262,6 +264,70 @@ func _banner_row() -> Control:
 		+ "drawing a generated gradient because no file of that name was found:"))
 	box.add_child(UI.caption("  " + ", ".join(missing) + "  (.png, .jpg or .webp)"))
 	return box
+
+
+func _model_row() -> Control:
+	var box := UI.vbox(Design.S1)
+
+	var missing := Models.missing_zone_models()
+	var total := Campaign.ZONES.size()
+	var found := total - missing.size()
+
+	var colour := Design.DANGER
+	if missing.is_empty():
+		colour = Design.SUCCESS
+	elif found > 0:
+		colour = Design.ACCENT
+	box.add_child(UI.label("Zone models: %d of %d matched" % [found, total],
+		Design.FS_BODY, colour))
+
+	if not missing.is_empty():
+		box.add_child(UI.caption(
+			"Models load by exact zone id from res://art/models/zones/. "
+			+ "These zones are still building their landmarks from primitives:"))
+		box.add_child(UI.caption("  " + ", ".join(missing) + "  (.glb preferred)"))
+
+	if Models.has_player():
+		box.add_child(UI.label("Player model: loaded", Design.FS_BODY, Design.SUCCESS))
+		box.add_child(UI.caption(_player_animation_text()))
+	else:
+		box.add_child(UI.label("Player model: none found", Design.FS_BODY, Design.ACCENT))
+		box.add_child(UI.caption(
+			"Drop a rigged character at res://art/models/player.glb to replace "
+			+ "the placeholder capsule. See res://art/models/README.txt."))
+
+	return box
+
+
+# Which clips the loose name matching actually bound, so a mismatched
+# animation name is visible instead of just never playing.
+func _player_animation_text() -> String:
+	var model := Models.spawn_player()
+	if model == null:
+		return ""
+
+	var player := Models.find_animation_player(model)
+	if player == null:
+		model.queue_free()
+		return "No AnimationPlayer in the file — the character will not animate."
+
+	var idle_words: Array[String] = ["idle", "stand", "breath"]
+	var run_words: Array[String] = ["run", "walk", "jog", "sprint", "move"]
+	var jump_words: Array[String] = ["jump", "fall", "air", "leap"]
+
+	var idle := Models.animation_named(player, idle_words)
+	var run := Models.animation_named(player, run_words)
+	var jump := Models.animation_named(player, jump_words)
+	model.queue_free()
+
+	return "Animations — idle: %s   run: %s   jump: %s" % [
+		_or_none(idle), _or_none(run), _or_none(jump)]
+
+
+func _or_none(value: String) -> String:
+	if value == "":
+		return "(none matched)"
+	return value
 
 
 func _icon_row() -> Control:

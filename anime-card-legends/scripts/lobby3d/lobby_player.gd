@@ -22,12 +22,28 @@ const PITCH_MAX := 0.45
 const CAM_DISTANCE := 9.0
 const CAM_HEIGHT := 3.2
 
+# How tall the character stands, imported or not. The capsule collider
+# is built to this, and an imported model is rescaled to match it, so a
+# model exported at any scale walks the world correctly.
+const BODY_HEIGHT := 1.9
+
+# Godot's forward is -Z. Set this to PI if the imported character faces
+# the camera while running away.
+const MODEL_YAW := 0.0
+
 var _yaw := 0.0
 var _pitch := -0.25
 var _body: Node3D
 var _pivot: Node3D
 var _camera: Camera3D
 var _mouse_captured := false
+
+# Set only when res://art/models/player.* supplied an AnimationPlayer.
+var _anim: AnimationPlayer
+var _anim_idle := ""
+var _anim_run := ""
+var _anim_jump := ""
+var _anim_current := ""
 
 
 func _ready() -> void:
@@ -41,15 +57,19 @@ func _build_collision() -> void:
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.5
-	capsule.height = 2.0
+	capsule.height = BODY_HEIGHT
 	shape.shape = capsule
-	shape.position.y = 1.0
+	shape.position.y = BODY_HEIGHT * 0.5
 	add_child(shape)
 
 
 func _build_body() -> void:
 	_body = Node3D.new()
 	add_child(_body)
+
+	# An imported character replaces the placeholder entirely.
+	if _build_imported_body():
+		return
 
 	var torso := MeshInstance3D.new()
 	var capsule := CapsuleMesh.new()
@@ -83,6 +103,55 @@ func _build_body() -> void:
 	glow.light_energy = 1.0
 	glow.omni_range = 7.0
 	_body.add_child(glow)
+
+
+# Drops res://art/models/player.glb in as the character, rescaled to
+# BODY_HEIGHT and re-seated so its feet are on the ground. Returns false
+# when there is no model, in which case the capsule placeholder is used.
+#
+# The model is expected to face -Z, which is Godot's forward. If it walks
+# backwards, set MODEL_YAW at the top of this file to PI.
+func _build_imported_body() -> bool:
+	var model := Models.spawn_player()
+	if model == null:
+		return false
+
+	_body.add_child(model)
+	Models.fit_height(model, BODY_HEIGHT)
+	model.rotation.y = MODEL_YAW
+
+	_anim = Models.find_animation_player(model)
+	if _anim != null:
+		var idle_words: Array[String] = ["idle", "stand", "breath"]
+		var run_words: Array[String] = ["run", "walk", "jog", "sprint", "move"]
+		var jump_words: Array[String] = ["jump", "fall", "air", "leap"]
+		_anim_idle = Models.animation_named(_anim, idle_words)
+		_anim_run = Models.animation_named(_anim, run_words)
+		_anim_jump = Models.animation_named(_anim, jump_words)
+		_play_animation(_anim_idle)
+
+	return true
+
+
+# Switching only on a change keeps the clip from restarting every frame.
+func _play_animation(anim_name: String) -> void:
+	if _anim == null or anim_name == "" or anim_name == _anim_current:
+		return
+	if not _anim.has_animation(anim_name):
+		return
+	_anim_current = anim_name
+	_anim.play(anim_name)
+
+
+func _update_animation(moving: bool) -> void:
+	if _anim == null:
+		return
+	if not is_on_floor() and _anim_jump != "":
+		_play_animation(_anim_jump)
+	elif moving and _anim_run != "":
+		_play_animation(_anim_run)
+	elif _anim_idle != "":
+		_play_animation(_anim_idle)
 
 
 func _build_camera() -> void:
@@ -144,6 +213,8 @@ func _physics_process(delta: float) -> void:
 	if direction != Vector3.ZERO and _body:
 		var want := atan2(direction.x, direction.z)
 		_body.rotation.y = lerp_angle(_body.rotation.y, want, TURN_SPEED * delta)
+
+	_update_animation(direction != Vector3.ZERO)
 
 
 func _apply_camera() -> void:
