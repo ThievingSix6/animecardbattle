@@ -11,7 +11,13 @@ var _speed_value: Label
 
 
 func screen_title() -> String: return "Settings"
-func back_route() -> String: return Routes.MAIN
+# Reachable from the title screen before any profile is open, so back
+# has to mean the title in that case rather than a screen that would
+# immediately bounce for want of a save slot.
+func back_route() -> String:
+	if GameState.has_active_slot():
+		return Routes.MAIN
+	return Routes.TITLE
 func requires_slot() -> bool: return false
 func shows_currency() -> bool: return false
 func shows_weather() -> bool: return false

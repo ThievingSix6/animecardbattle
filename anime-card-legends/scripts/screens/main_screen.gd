@@ -26,6 +26,7 @@ func scrolls_content() -> bool: return false
 func build_content() -> void:
 	Audio.play_music("music_menu")
 
+	header_actions.add_child(UI.button("Title", func(): Routes.go(self, Routes.TITLE), Vector2(90, 44)))
 	header_actions.add_child(UI.button("Profiles", _switch_profile, Vector2(110, 44)))
 
 	var hero := UI.vbox(Design.S1)

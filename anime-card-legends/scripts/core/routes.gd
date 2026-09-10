@@ -6,6 +6,7 @@ extends RefCounted
 # "res://scenes/X.tscn" strings scattered through the codebase.
 # =========================================================
 
+const TITLE    := "res://scenes/Title.tscn"
 const SLOTS    := "res://scenes/SaveSlots.tscn"
 const MAIN     := "res://scenes/Main.tscn"
 const LOBBY    := "res://scenes/Lobby.tscn"

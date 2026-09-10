@@ -62,7 +62,7 @@ func _ready() -> void:
 
 
 func _bounce_to_slots() -> void:
-	get_tree().change_scene_to_file(Routes.SLOTS)
+	get_tree().change_scene_to_file(Routes.TITLE)
 
 
 func _process(_delta: float) -> void:

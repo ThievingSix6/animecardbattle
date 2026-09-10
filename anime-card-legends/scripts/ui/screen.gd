@@ -67,8 +67,10 @@ func background_image() -> String:
 	return "menu_bg"
 
 
+# No profile open: back to the front door, which is where a profile
+# gets chosen or made.
 func _bounce_to_slots() -> void:
-	Routes.go(self, Routes.SLOTS)
+	Routes.go(self, Routes.TITLE)
 
 
 func _build_chrome() -> void:

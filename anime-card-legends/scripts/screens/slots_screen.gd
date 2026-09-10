@@ -8,8 +8,8 @@ extends Screen
 var _row: HBoxContainer
 
 
-func screen_title() -> String: return "Anime Card Legends"
-func back_route() -> String: return ""
+func screen_title() -> String: return "Profiles"
+func back_route() -> String: return Routes.TITLE
 func shows_currency() -> bool: return false
 func shows_weather() -> bool: return false
 func requires_slot() -> bool: return false
@@ -135,9 +135,11 @@ func _ago(unix_time: int) -> String:
 	return str(int(seconds / 86400.0)) + " days ago"
 
 
+# Into the city, not the flat menu: the city is the hub, and landing
+# anywhere else would just mean walking to it.
 func _open(slot: int) -> void:
 	GameState.open_slot(slot)
-	Routes.go(self, Routes.MAIN)
+	Routes.go(self, Routes.LOBBY)
 
 
 func _confirm_delete(slot: int) -> void:
