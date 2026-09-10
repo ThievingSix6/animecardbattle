@@ -48,12 +48,12 @@ func _process(delta: float) -> void:
 # --- Values ---------------------------------------------------------
 
 func battle_speed() -> float:
-	var i := clamp(battle_speed_index, 0, BATTLE_SPEEDS.size() - 1)
+	var i: int = clampi(battle_speed_index, 0, BATTLE_SPEEDS.size() - 1)
 	return BATTLE_SPEEDS[i]
 
 
 func battle_speed_label() -> String:
-	var i := clamp(battle_speed_index, 0, BATTLE_SPEED_LABELS.size() - 1)
+	var i: int = clampi(battle_speed_index, 0, BATTLE_SPEED_LABELS.size() - 1)
 	return BATTLE_SPEED_LABELS[i]
 
 
@@ -63,20 +63,20 @@ func cycle_battle_speed() -> void:
 
 
 func set_sfx_volume(value: float) -> void:
-	sfx_volume = clamp(value, 0.0, 1.0)
+	sfx_volume = clampf(value, 0.0, 1.0)
 	Audio.sfx_volume = sfx_volume
 	_announce()
 
 
 func set_music_volume(value: float) -> void:
-	music_volume = clamp(value, 0.0, 1.0)
+	music_volume = clampf(value, 0.0, 1.0)
 	Audio.music_volume = music_volume
 	Audio.apply_music_volume()
 	_announce()
 
 
 func set_battle_speed_index(value: int) -> void:
-	battle_speed_index = clamp(value, 0, BATTLE_SPEEDS.size() - 1)
+	battle_speed_index = clampi(value, 0, BATTLE_SPEEDS.size() - 1)
 	_announce()
 
 
@@ -107,9 +107,9 @@ func load_settings() -> void:
 		_apply_to_audio()
 		return
 
-	sfx_volume = clamp(float(config.get_value("audio", "sfx_volume", sfx_volume)), 0.0, 1.0)
-	music_volume = clamp(float(config.get_value("audio", "music_volume", music_volume)), 0.0, 1.0)
-	battle_speed_index = clamp(
+	sfx_volume = clampf(float(config.get_value("audio", "sfx_volume", sfx_volume)), 0.0, 1.0)
+	music_volume = clampf(float(config.get_value("audio", "music_volume", music_volume)), 0.0, 1.0)
+	battle_speed_index = clampi(
 		int(config.get_value("gameplay", "battle_speed_index", battle_speed_index)),
 		0, BATTLE_SPEEDS.size() - 1)
 	reduce_flashing = bool(config.get_value("gameplay", "reduce_flashing", reduce_flashing))

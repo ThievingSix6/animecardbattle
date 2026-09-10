@@ -70,20 +70,20 @@ func modifier(stat: String) -> float:
 
 
 func attack_power() -> int:
-	return max(1, int(round(float(data.attack) * (1.0 + modifier("attack")))))
+	return maxi(1, int(round(float(data.attack) * (1.0 + modifier("attack")))))
 
 
 func defense_power() -> int:
-	return max(0, int(round(float(data.defense) * (1.0 + modifier("defense")))))
+	return maxi(0, int(round(float(data.defense) * (1.0 + modifier("defense")))))
 
 
 func speed_value() -> int:
-	return max(1, int(round(float(data.speed) * (1.0 + modifier("speed")))))
+	return maxi(1, int(round(float(data.speed) * (1.0 + modifier("speed")))))
 
 
 # Energy gained per attack scales with the "attack speed" analogue.
 func energy_rate() -> float:
-	return max(0.1, 1.0 + modifier("energyRate"))
+	return maxf(0.1, 1.0 + modifier("energyRate"))
 
 
 func add_buff(stat: String, amount: float, duration: int, key: String = "", max_stacks: int = INFINITE) -> void:
@@ -145,14 +145,14 @@ func claim(key: String) -> bool:
 
 # Applies damage through the shield. Returns true if this was lethal.
 func take_damage(amount: int) -> bool:
-	var remaining := max(0, int(round(float(amount) * (1.0 + modifier("damageTaken")))))
+	var remaining: int = maxi(0, int(round(float(amount) * (1.0 + modifier("damageTaken")))))
 
 	if shield > 0:
-		var absorbed := min(shield, remaining)
+		var absorbed: int = mini(shield, remaining)
 		shield -= absorbed
 		remaining -= absorbed
 
-	hp = max(0, hp - remaining)
+	hp = maxi(0, hp - remaining)
 	if hp == 0 and alive:
 		alive = false
 		return true
@@ -164,22 +164,22 @@ func heal(amount: int) -> int:
 		return 0
 	var scaled := int(round(float(amount) * (1.0 + modifier("healingReceived"))))
 	var before := hp
-	hp = min(max_hp, hp + scaled)
+	hp = mini(max_hp, hp + scaled)
 	return hp - before
 
 
 func add_shield(amount: int) -> int:
-	var gain := max(0, amount)
+	var gain: int = maxi(0, amount)
 	shield += gain
 	return gain
 
 
 func gain_energy(amount: int) -> void:
-	energy = min(Config.ENERGY_MAX, energy + int(round(float(amount) * energy_rate())))
+	energy = mini(Config.ENERGY_MAX, energy + int(round(float(amount) * energy_rate())))
 
 
 func hp_ratio() -> float:
-	return float(hp) / float(max(1, max_hp))
+	return float(hp) / float(maxi(1, max_hp))
 
 
 func is_targetable() -> bool:
@@ -231,4 +231,4 @@ func first_dot(kind: String) -> Dictionary:
 
 
 func apply_dot(kind: String, duration: int, per_turn: int) -> void:
-	dots.append({"kind": kind, "turns": duration, "per_turn": max(1, per_turn)})
+	dots.append({"kind": kind, "turns": duration, "per_turn": maxi(1, per_turn)})

@@ -79,7 +79,7 @@ func set_active_index(side: String, value: int) -> void:
 
 # Lanes only advance forward - a fallen card is replaced permanently.
 func advance(list: Array[Combatant], from: int) -> int:
-	for i in range(max(0, from), list.size()):
+	for i in range(maxi(0, from), list.size()):
 		if list[i].alive:
 			return i
 	return -1
@@ -143,7 +143,7 @@ func next_ally(unit: Combatant) -> Combatant:
 
 
 func note(source: Combatant, text: String, amount: int = 0) -> void:
-	var label := Skills.display_name(source.data.skill_id)
+	var label: String = Skills.display_name(source.data.skill_id)
 	if label == "":
 		label = "Passive"
 	skill_triggered.emit(source, label, text, amount)
@@ -371,7 +371,7 @@ func _strike(attacker: Combatant, target: Combatant, base_damage: int, kind: Str
 	out_ctx.damage = base_damage
 	_fire("outgoing", attacker, out_ctx)
 
-	var damage := max(1, int(round(float(out_ctx.damage) * (1.0 + attacker.modifier("damageDealt")))))
+	var damage: int = maxi(1, int(round(float(out_ctx.damage) * (1.0 + attacker.modifier("damageDealt")))))
 
 	var in_ctx := _ctx(target)
 	in_ctx.attacker = attacker
@@ -383,7 +383,7 @@ func _strike(attacker: Combatant, target: Combatant, base_damage: int, kind: Str
 			"%s blocks %s" % [target.data.card_name, attacker.data.card_name], 0)
 		return false
 
-	damage = max(1, in_ctx.damage)
+	damage = maxi(1, in_ctx.damage)
 
 	if damage >= target.hp + target.shield:
 		var save_ctx := _ctx(target)
@@ -460,7 +460,7 @@ func _on_death(who: Combatant, killer: Combatant) -> void:
 
 func summon(owner: Combatant, minion_name: String, stat_pct: float, lifespan: int, count: int) -> void:
 	var list := team(owner.side)
-	var bonus := 1.0 + min(0.3, float(owner.count("souls")) * 0.1)
+	var bonus: float = 1.0 + minf(0.3, float(owner.count("souls")) * 0.1)
 
 	for i in count:
 		var card := CardData.new()
@@ -472,9 +472,9 @@ func summon(owner: Combatant, minion_name: String, stat_pct: float, lifespan: in
 		card.origin_tag = "summon"
 		card.basic_ability = "Strike"
 		card.ultimate_ability = "Strike"
-		card.attack = max(1, int(round(float(owner.data.attack) * stat_pct * bonus)))
-		card.defense = max(0, int(round(float(owner.data.defense) * stat_pct * bonus)))
-		card.health = max(1, int(round(float(owner.data.health) * stat_pct * bonus)))
+		card.attack = maxi(1, int(round(float(owner.data.attack) * stat_pct * bonus)))
+		card.defense = maxi(0, int(round(float(owner.data.defense) * stat_pct * bonus)))
+		card.health = maxi(1, int(round(float(owner.data.health) * stat_pct * bonus)))
 		card.speed = owner.data.speed
 
 		var minion := Combatant.new(card, owner.side, list.size())
@@ -485,7 +485,7 @@ func summon(owner: Combatant, minion_name: String, stat_pct: float, lifespan: in
 
 
 static func compute_damage(attack: int, defense: int) -> int:
-	return max(1, attack - int(float(defense) * Config.DEFENSE_FACTOR))
+	return maxi(1, attack - int(float(defense) * Config.DEFENSE_FACTOR))
 
 
 func _check_end() -> bool:

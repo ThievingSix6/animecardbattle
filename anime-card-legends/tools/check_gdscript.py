@@ -6,7 +6,10 @@ project. Run before opening Godot:
     python3 tools/check_gdscript.py
 
 Catches:
-  1. `var x := <expr>` that cannot infer a type (Variant sources)
+  1. `var x := <expr>` that cannot infer a type (Variant sources).
+     This includes min/max/clamp/abs/sign, which all return Variant --
+     with inferred-declaration warnings promoted to errors, one of these
+     fails the whole class and everything that references it.
   2. untyped collection literals feeding a loop variable
   3. ternaries in argument lists (parser ambiguity)
   4. mixed tab/space indentation
@@ -68,9 +71,16 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
             rhs = m.group(2).strip()
             # An explicit conversion or constructor gives a known type,
             # so Variant inputs inside it are fine.
+            # Only real conversions give a known type. min/max/clamp/abs
+            # and friends return Variant, so inferring from them is the
+            # mistake this rule exists to catch -- they are NOT casts.
             CASTS = ("float(", "int(", "str(", "bool(", "Color(", "Vector2(",
-                     "Vector3(", "StringName(", "NodePath(", "hash(", "len(",
-                     "abs(", "round(", "sign(", "min(", "max(")
+                     "Vector3(", "StringName(", "NodePath(", "hash(", "len(")
+            VARIANT_FUNCS = ("min(", "max(", "clamp(", "abs(", "sign(",
+                             "snapped(", "wrap(", "lerp(", "posmod(")
+            if rhs.startswith(VARIANT_FUNCS):
+                add(rel, i, "VARIANT-INFER", line)
+                continue
             if rhs.startswith(CASTS):
                 continue
             if re.search(r"\.get\(|\w+\[\"", rhs):

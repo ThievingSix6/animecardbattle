@@ -18,7 +18,7 @@ extends RefCounted
 static func entry(skill_id: String, c: SkillCtx) -> void:
 	match skill_id:
 		"guardians_oath":
-			var ally := c.sim.lowest_hp_ally(c.unit, false)
+			var ally: Combatant = c.sim.lowest_hp_ally(c.unit, false)
 			if ally != null and not ally.has_buff("oath"):
 				ally.add_buff("damageTaken", -0.15, Combatant.INFINITE, "oath", 1)
 				c.sim.note(c.unit, "%s swears to guard %s" % [c.unit.data.card_name, ally.data.card_name])
@@ -39,14 +39,14 @@ static func entry(skill_id: String, c: SkillCtx) -> void:
 
 		"blood_pact":
 			if c.unit.claim("blood_pact"):
-				var ally := c.sim.strongest_ally(c.unit, false)
+				var ally: Combatant = c.sim.strongest_ally(c.unit, false)
 				if ally != null:
-					c.unit.hp = max(1, c.unit.hp - c.pct_max(c.unit, 0.05))
+					c.unit.hp = maxi(1, c.unit.hp - c.pct_max(c.unit, 0.05))
 					ally.add_buff("attack", 0.08, Combatant.INFINITE)
 					c.sim.note(c.unit, "%s seals a pact with %s" % [c.unit.data.card_name, ally.data.card_name])
 
 		"martyr":
-			var guarded := c.sim.lowest_hp_ally(c.unit, false)
+			var guarded: Combatant = c.sim.lowest_hp_ally(c.unit, false)
 			if guarded != null and not guarded.has_buff("martyr"):
 				guarded.add_buff("damageTaken", -0.40, Combatant.INFINITE, "martyr", 1)
 
@@ -88,8 +88,8 @@ static func entry(skill_id: String, c: SkillCtx) -> void:
 		"glass_cannon":
 			if c.unit.claim("glass"):
 				c.unit.add_buff("attack", 0.25, Combatant.INFINITE)
-				c.unit.max_hp = max(1, int(round(float(c.unit.max_hp) * 0.9)))
-				c.unit.hp = min(c.unit.hp, c.unit.max_hp)
+				c.unit.max_hp = maxi(1, int(round(float(c.unit.max_hp) * 0.9)))
+				c.unit.hp = mini(c.unit.hp, c.unit.max_hp)
 
 		"cursed_strength":
 			if c.unit.claim("cursed"):
@@ -109,7 +109,7 @@ static func entry(skill_id: String, c: SkillCtx) -> void:
 					if best == null or e.attack_power() > best.attack_power():
 						best = e
 				if best != null:
-					var bonus := float(best.attack_power()) * 0.05 / float(max(1, c.unit.data.attack))
+					var bonus := float(best.attack_power()) * 0.05 / float(maxi(1, c.unit.data.attack))
 					c.unit.add_buff("attack", bonus, Combatant.INFINITE)
 
 
@@ -162,7 +162,7 @@ static func turn_start(skill_id: String, c: SkillCtx) -> void:
 
 		"lifebloom":
 			if c.unit.bump("lifebloom") % Skills.turns(6.0) == 0:
-				var ally := c.sim.lowest_hp_ally(c.unit, true)
+				var ally: Combatant = c.sim.lowest_hp_ally(c.unit, true)
 				if ally != null:
 					var healed := ally.heal(c.pct_max(ally, 0.05))
 					if healed > 0:
@@ -186,7 +186,7 @@ static func turn_start(skill_id: String, c: SkillCtx) -> void:
 				c.unit.heal(c.pct_max(c.unit, 0.01))
 
 		"vital_link":
-			var linked := c.sim.lowest_hp_ally(c.unit, false)
+			var linked: Combatant = c.sim.lowest_hp_ally(c.unit, false)
 			if linked != null and c.unit.bump("vital") % Skills.turns(6.0) == 0:
 				linked.heal(c.pct_max(c.unit, 0.10))
 
@@ -263,8 +263,8 @@ static func turn_start(skill_id: String, c: SkillCtx) -> void:
 			if ticks % Skills.turns(5.0) == 0:
 				c.unit.add_buff("attack", 0.02, Combatant.INFINITE, "doom", 10)
 			if ticks == Skills.turns(30.0):
-				c.unit.max_hp = max(1, int(round(float(c.unit.max_hp) * 0.9)))
-				c.unit.hp = min(c.unit.hp, c.unit.max_hp)
+				c.unit.max_hp = maxi(1, int(round(float(c.unit.max_hp) * 0.9)))
+				c.unit.hp = mini(c.unit.hp, c.unit.max_hp)
 				c.sim.note(c.unit, "%s's clock strikes midnight" % c.unit.data.card_name)
 
 		"unstable_core":
@@ -320,7 +320,7 @@ static func outgoing(skill_id: String, c: SkillCtx) -> void:
 				c.damage = int(round(float(c.damage) * 1.2))
 
 		"backstab":
-			var active := c.sim.active_enemy(c.unit)
+			var active: Combatant = c.sim.active_enemy(c.unit)
 			if c.target != null and active != null and c.target.id() != active.id():
 				c.damage = int(round(float(c.damage) * 1.25))
 
@@ -582,7 +582,7 @@ static func death(skill_id: String, c: SkillCtx) -> void:
 				c.attacker.apply_dot("burn", Skills.turns(5.0), int(round(float(total) / float(Skills.turns(5.0)))))
 
 		"grave_gift":
-			var ally := c.sim.lowest_hp_ally(c.unit, false)
+			var ally: Combatant = c.sim.lowest_hp_ally(c.unit, false)
 			if ally != null:
 				var healed := ally.heal(c.pct_max(ally, 0.08))
 				c.sim.note(c.unit, "%s leaves a parting gift to %s" % [c.unit.data.card_name, ally.data.card_name], healed)
@@ -592,12 +592,12 @@ static func death(skill_id: String, c: SkillCtx) -> void:
 				c.attacker.add_buff("energyRate", -0.10, Skills.turns(5.0))
 
 		"final_offering":
-			var heir := c.sim.next_ally(c.unit)
+			var heir: Combatant = c.sim.next_ally(c.unit)
 			if heir != null:
 				heir.add_buff("attack", 0.15, Skills.turns(6.0))
 
 		"soul_shard":
-			var bearer := c.sim.next_ally(c.unit)
+			var bearer: Combatant = c.sim.next_ally(c.unit)
 			if bearer != null:
 				bearer.add_shield(c.pct_max(bearer, 0.10))
 
@@ -606,12 +606,12 @@ static func death(skill_id: String, c: SkillCtx) -> void:
 				c.attacker.add_buff("healingReceived", -0.20, Skills.turns(5.0))
 
 		"death_echo":
-			var enemy := c.sim.active_enemy(c.unit)
+			var enemy: Combatant = c.sim.active_enemy(c.unit)
 			if enemy != null:
 				c.sim.direct_damage(c.unit, enemy, int(round(float(c.unit.attack_power()) * 0.5)), "Death Echo")
 
 		"grim_inheritance":
-			var successor := c.sim.next_ally(c.unit)
+			var successor: Combatant = c.sim.next_ally(c.unit)
 			if successor != null:
 				var passed := 0
 				for buff in c.unit.buffs:
@@ -644,7 +644,7 @@ static func ally_death(skill_id: String, c: SkillCtx) -> void:
 				c.sim.summon(c.unit, "Risen Skeleton", 0.3, Skills.turns(10.0), 1)
 
 		"soul_mend":
-			var ally := c.sim.lowest_hp_ally(c.unit, true)
+			var ally: Combatant = c.sim.lowest_hp_ally(c.unit, true)
 			if ally != null:
 				var healed := ally.heal(c.pct_max(ally, 0.12))
 				if healed > 0:

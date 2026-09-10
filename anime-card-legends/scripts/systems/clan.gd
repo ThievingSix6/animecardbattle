@@ -129,7 +129,7 @@ func level_progress() -> float:
 	var needed := xp_to_next()
 	if needed <= 0:
 		return 1.0
-	return clamp(float(xp) / float(needed), 0.0, 1.0)
+	return clampf(float(xp) / float(needed), 0.0, 1.0)
 
 
 # Adds clan XP and levels up as far as the total allows.
@@ -163,7 +163,7 @@ func perk_value(perk_id: String) -> float:
 			continue
 		if level < int(perk["level"]):
 			continue
-		best = max(best, float(perk["value"]))
+		best = maxf(best, float(perk["value"]))
 	return best
 
 
@@ -238,7 +238,7 @@ func start_raid() -> void:
 func raid_progress() -> float:
 	if raid_max_hp <= 0:
 		return 0.0
-	return clamp(1.0 - float(raid_hp) / float(raid_max_hp), 0.0, 1.0)
+	return clampf(1.0 - float(raid_hp) / float(raid_max_hp), 0.0, 1.0)
 
 
 # Returns true when this damage finished the boss off.
@@ -246,7 +246,7 @@ func damage_raid(amount: int, from_player: bool) -> bool:
 	if not raid_active or amount <= 0:
 		return false
 
-	raid_hp = max(0, raid_hp - amount)
+	raid_hp = maxi(0, raid_hp - amount)
 	if from_player:
 		raid_player_damage += amount
 
@@ -261,7 +261,7 @@ func damage_raid(amount: int, from_player: bool) -> bool:
 func raid_player_share() -> float:
 	if raid_max_hp <= 0:
 		return 0.0
-	return clamp(float(raid_player_damage) / float(raid_max_hp), 0.0, 1.0)
+	return clampf(float(raid_player_damage) / float(raid_max_hp), 0.0, 1.0)
 
 
 # --- Background activity ------------------------------------------------------
@@ -321,7 +321,7 @@ func from_dict(data: Dictionary) -> void:
 	clan_name = str(data.get("name", ""))
 	clan_tag = str(data.get("tag", ""))
 	member_seed = int(data.get("seed", 0))
-	level = clamp(int(data.get("level", 1)), 1, MAX_LEVEL)
+	level = clampi(int(data.get("level", 1)), 1, MAX_LEVEL)
 	xp = int(data.get("xp", 0))
 	player_weekly = int(data.get("player_weekly", 0))
 	player_total = int(data.get("player_total", 0))

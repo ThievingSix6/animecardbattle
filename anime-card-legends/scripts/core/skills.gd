@@ -177,7 +177,7 @@ static var _by_id: Dictionary = {}
 
 # Converts a real-time duration from a skill design into whole turns.
 static func turns(seconds: float) -> int:
-	return max(1, int(round(seconds / SECONDS_PER_TURN)))
+	return maxi(1, int(round(seconds / SECONDS_PER_TURN)))
 
 
 static func _index() -> Dictionary:
@@ -198,42 +198,42 @@ static func has(skill_id: String) -> bool:
 
 
 static func display_name(skill_id: String) -> String:
-	var skill := by_id(skill_id)
+	var skill: Dictionary = by_id(skill_id)
 	if skill.is_empty():
 		return ""
 	return str(skill["name"])
 
 
 static func text_of(skill_id: String) -> String:
-	var skill := by_id(skill_id)
+	var skill: Dictionary = by_id(skill_id)
 	if skill.is_empty():
 		return ""
 	return str(skill["text"])
 
 
 static func family_of(skill_id: String) -> String:
-	var skill := by_id(skill_id)
+	var skill: Dictionary = by_id(skill_id)
 	if skill.is_empty():
 		return ""
 	return str(skill["family"])
 
 
 static func family_label(skill_id: String) -> String:
-	var family := family_of(skill_id)
+	var family: String = family_of(skill_id)
 	if family == "":
 		return ""
 	return str(FAMILY_LABEL[family])
 
 
 static func family_color(skill_id: String) -> Color:
-	var family := family_of(skill_id)
+	var family: String = family_of(skill_id)
 	if family == "":
 		return Color("#646c7e")
 	return Color(str(FAMILY_COLOR[family]))
 
 
 static func family_icon(skill_id: String) -> String:
-	var family := family_of(skill_id)
+	var family: String = family_of(skill_id)
 	if family == "":
 		return ""
 	return str(FAMILY_ICON[family])
@@ -256,27 +256,27 @@ static func in_family(family: String) -> Array[Dictionary]:
 # which families are reachable; the passive is what makes each card
 # mechanically distinct.
 static func pick_for(role: String, rarity: String, rng: RandomNumberGenerator = null) -> String:
-	var apex := Config.rarity_index(rarity) >= Config.rarity_index("Legendary")
+	var apex: bool = Config.rarity_index(rarity) >= Config.rarity_index("Legendary")
 
-	var legendary_roll := randf()
+	var legendary_roll: float = randf()
 	if rng != null:
 		legendary_roll = rng.randf()
 
-	var family := ""
+	var family: String = ""
 	if apex and legendary_roll < LEGENDARY_SKILL_CHANCE:
 		family = "legendary"
 	else:
 		var pool: Array = ROLE_FAMILIES.get(role, ["offense"])
-		var pick := randi() % pool.size()
+		var pick: int = randi() % pool.size()
 		if rng != null:
 			pick = rng.randi() % pool.size()
 		family = str(pool[pick])
 
-	var options := in_family(family)
+	var options: Array[Dictionary] = in_family(family)
 	if options.is_empty():
 		return ""
 
-	var index := randi() % options.size()
+	var index: int = randi() % options.size()
 	if rng != null:
 		index = rng.randi() % options.size()
 	return str(options[index]["id"])

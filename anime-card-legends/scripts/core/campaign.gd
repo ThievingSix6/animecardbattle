@@ -156,7 +156,7 @@ static func floor_for(zone_index: int, stage_index: int) -> int:
 
 static func zone_index_for_floor(floor_number: int) -> int:
 	var i := int((floor_number - 1) / float(STAGES_PER_ZONE))
-	return clamp(i, 0, ZONES.size() - 1)
+	return clampi(i, 0, ZONES.size() - 1)
 
 
 static func stage_index_for_floor(floor_number: int) -> int:
@@ -202,7 +202,7 @@ static func zone_unlocked(zone_index: int, highest_floor: int) -> bool:
 static func stages_cleared_in(zone_index: int, highest_floor: int) -> int:
 	var first := zone_index * STAGES_PER_ZONE
 	var cleared := highest_floor - first
-	return clamp(cleared, 0, STAGES_PER_ZONE)
+	return clampi(cleared, 0, STAGES_PER_ZONE)
 
 
 static func zone_complete(zone_index: int, highest_floor: int) -> bool:
