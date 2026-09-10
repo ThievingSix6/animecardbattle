@@ -125,12 +125,10 @@ func _build_imported_body() -> bool:
 
 	_anim = Models.find_animation_player(model)
 	if _anim != null:
-		var idle_words: Array[String] = ["idle", "stand", "breath"]
-		var run_words: Array[String] = ["run", "walk", "jog", "sprint", "move"]
-		var jump_words: Array[String] = ["jump", "fall", "air", "leap"]
-		_anim_idle = Models.animation_named(_anim, idle_words)
-		_anim_run = Models.animation_named(_anim, run_words)
-		_anim_jump = Models.animation_named(_anim, jump_words)
+		var clips := Models.animation_set(_anim)
+		_anim_idle = str(clips["idle"])
+		_anim_run = str(clips["run"])
+		_anim_jump = str(clips["jump"])
 		_play_animation(_anim_idle)
 
 	return true

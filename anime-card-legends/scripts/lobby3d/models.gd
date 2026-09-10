@@ -478,3 +478,47 @@ static func animation_named(player: AnimationPlayer, keywords: Array[String]) ->
 			if str(entry).to_lower().contains(keyword):
 				return str(entry)
 	return ""
+
+
+# The keyword lists, in one place, so the loader and the asset report
+# can never disagree about what should have bound.
+#
+# Order matters: the first keyword that matches anything wins. The
+# vaguer entries sit at the end as last resorts - a character with no
+# idle clip at all standing in a dance loop still reads better than one
+# frozen on frame zero.
+const IDLE_WORDS: Array[String] = [
+	"idle", "stand", "breath", "wait", "greet", "talk", "pose", "dance",
+]
+const RUN_WORDS: Array[String] = [
+	"run", "walk", "jog", "sprint", "stride", "move",
+]
+const JUMP_WORDS: Array[String] = [
+	"jump", "leap", "fall", "air",
+]
+const TALK_WORDS: Array[String] = [
+	"talk", "speak", "greet", "chat", "sit", "converse",
+]
+const DEFEAT_WORDS: Array[String] = [
+	"defeat", "death", "die", "dead", "lose", "loss", "kneel", "down",
+	"ko", "hurt", "collapse",
+]
+
+
+# Every clip an actor uses, resolved together so the fallbacks can see
+# each other: an actor with no idle borrows its talk clip, and one with
+# no talk borrows its idle.
+static func animation_set(player: AnimationPlayer) -> Dictionary:
+	var out := {
+		"idle": animation_named(player, IDLE_WORDS),
+		"run": animation_named(player, RUN_WORDS),
+		"jump": animation_named(player, JUMP_WORDS),
+		"talk": animation_named(player, TALK_WORDS),
+		"defeat": animation_named(player, DEFEAT_WORDS),
+	}
+
+	if str(out["idle"]) == "":
+		out["idle"] = out["talk"]
+	if str(out["talk"]) == "":
+		out["talk"] = out["idle"]
+	return out

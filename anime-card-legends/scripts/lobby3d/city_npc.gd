@@ -42,6 +42,7 @@ var _model: Node3D
 var _anim: AnimationPlayer
 var _anim_idle := ""
 var _anim_run := ""
+var _anim_talk := ""
 var _anim_defeat := ""
 var _anim_current := ""
 
@@ -93,12 +94,11 @@ func _build_model() -> bool:
 
 	_anim = Models.find_animation_player(_model)
 	if _anim != null:
-		var idle_words: Array[String] = ["idle", "stand", "breath", "talk"]
-		var run_words: Array[String] = ["run", "walk", "jog", "move"]
-		var defeat_words: Array[String] = ["defeat", "death", "die", "lose", "fall", "kneel"]
-		_anim_idle = Models.animation_named(_anim, idle_words)
-		_anim_run = Models.animation_named(_anim, run_words)
-		_anim_defeat = Models.animation_named(_anim, defeat_words)
+		var clips := Models.animation_set(_anim)
+		_anim_idle = str(clips["idle"])
+		_anim_run = str(clips["run"])
+		_anim_talk = str(clips["talk"])
+		_anim_defeat = str(clips["defeat"])
 		_play(_anim_idle)
 
 	return true
@@ -164,8 +164,13 @@ func _play(anim_name: String) -> void:
 
 
 # Played when the player beats them. Falls back to idle when the model
-# has no defeat clip.
+# has no defeat clip - The Boy's current export has none, and the asset
+# report says so rather than this failing quietly.
+var defeated := false
+
+
 func play_defeat() -> void:
+	defeated = true
 	_frozen = true
 	_walking = false
 	if _anim_defeat != "":
@@ -174,11 +179,12 @@ func play_defeat() -> void:
 		_play(_anim_idle)
 
 
-# Stops walking and turns to face whoever is talking to them.
+# Stops walking and turns to face whoever is talking to them, playing
+# their talk clip if the model came with one.
 func face(target: Vector3) -> void:
 	_frozen = true
 	_walking = false
-	_play(_anim_idle)
+	_play(_anim_talk)
 
 	var to_target := Vector3(target.x - position.x, 0.0, target.z - position.z)
 	if to_target.length() > 0.01:
@@ -186,13 +192,17 @@ func face(target: Vector3) -> void:
 
 
 func release() -> void:
+	# A defeated NPC stays down; it is not a pose to snap out of.
+	if defeated:
+		return
 	_frozen = false
+	_play(_anim_idle)
 
 
 # --- Wandering ------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	if not wanders or _frozen:
+	if not wanders or _frozen or defeated:
 		return
 
 	if not _walking:

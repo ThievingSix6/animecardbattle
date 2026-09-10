@@ -352,14 +352,13 @@ func _npc_text() -> String:
 		if anim == null:
 			lines.append("%s: loaded, no animations" % id)
 		else:
-			var idle_words: Array[String] = ["idle", "stand", "breath", "talk"]
-			var run_words: Array[String] = ["run", "walk", "jog", "move"]
-			var defeat_words: Array[String] = ["defeat", "death", "die", "lose", "fall", "kneel"]
-			lines.append("%s: idle %s / run %s / defeat %s" % [
+			var clips := Models.animation_set(anim)
+			lines.append("%s: idle %s / run %s / talk %s / defeat %s" % [
 				id,
-				_or_none(Models.animation_named(anim, idle_words)),
-				_or_none(Models.animation_named(anim, run_words)),
-				_or_none(Models.animation_named(anim, defeat_words))])
+				_or_none(str(clips["idle"])),
+				_or_none(str(clips["run"])),
+				_or_none(str(clips["talk"])),
+				_or_none(str(clips["defeat"]))])
 		if model != null:
 			model.queue_free()
 
@@ -399,17 +398,13 @@ func _player_animation_text() -> String:
 		model.queue_free()
 		return "No AnimationPlayer in the file — the character will not animate."
 
-	var idle_words: Array[String] = ["idle", "stand", "breath"]
-	var run_words: Array[String] = ["run", "walk", "jog", "sprint", "move"]
-	var jump_words: Array[String] = ["jump", "fall", "air", "leap"]
-
-	var idle := Models.animation_named(player, idle_words)
-	var run := Models.animation_named(player, run_words)
-	var jump := Models.animation_named(player, jump_words)
+	var clips := Models.animation_set(player)
 	model.queue_free()
 
 	return "Animations — idle: %s   run: %s   jump: %s" % [
-		_or_none(idle), _or_none(run), _or_none(jump)]
+		_or_none(str(clips["idle"])),
+		_or_none(str(clips["run"])),
+		_or_none(str(clips["jump"]))]
 
 
 func _or_none(value: String) -> String:

@@ -344,6 +344,7 @@ func _finish_duel(player_won: bool) -> Dictionary:
 	Audio.play("victory")
 	var first_time := not GameState.progression.boy_defeated
 	GameState.progression.boy_defeated = true
+	GameState.progression.boy_just_lost = true
 
 	var rewards := {
 		"gems": Npcs.BOY_REWARD_GEMS,

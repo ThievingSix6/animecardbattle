@@ -737,6 +737,12 @@ func _build_npcs() -> void:
 		boy.roam_radius = 110.0
 		boy.street_pitch = BLOCK_PITCH
 
+		# Walking back in straight after beating him finds him where he
+		# fell, once. After that he is up and running again.
+		if GameState.progression.boy_just_lost:
+			GameState.progression.boy_just_lost = false
+			boy.play_defeat()
+
 	# The Jokester turns up wherever she likes, but inside the plaza ring
 	# so she is never standing in the middle of a building.
 	var joke_angle := _rng.randf_range(0.0, TAU)

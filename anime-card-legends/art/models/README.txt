@@ -67,14 +67,29 @@ scripts/lobby3d/lobby_player.gd.
 
 ANIMATIONS are picked up automatically from the AnimationPlayer that
 comes in with the model. Clip names are matched loosely and
-case-insensitively, so any of these work:
+case-insensitively, in the order listed - the first keyword that
+matches anything wins:
 
-  idle    matched by a name containing idle, stand or breath
-  run     matched by a name containing run, walk, jog, sprint or move
-  jump    matched by a name containing jump, fall, air or leap
+  idle    idle, stand, breath, wait, greet, talk, pose, dance
+  run     run, walk, jog, sprint, stride, move
+  jump    jump, leap, fall, air
+  talk    talk, speak, greet, chat, sit, converse       (NPCs)
+  defeat  defeat, death, die, dead, lose, kneel, down   (NPCs)
 
 "Idle", "idle_loop", "Armature|Run" and "CharacterJump" all match.
 Anything unmatched is simply left unused - nothing breaks.
+
+The vaguer idle keywords sit at the end deliberately. A character with
+no idle clip at all looks far worse frozen on frame zero than looping
+something loose, so "dance" is accepted as a last resort. If the
+character is idling in a dance loop, that is what happened - export a
+clip with "idle" in its name and it will take over.
+
+An actor with no idle borrows its talk clip, and one with no talk
+borrows its idle, so a model that shipped with a single animation is
+still used everywhere.
+
+The exact clip each slot bound to is listed in Settings > Assets.
 
 When exporting from Blender, tick "Include > Animation" and export
 the armature with its actions pushed to NLA strips (or as separate

@@ -31,6 +31,9 @@ var gauntlet_cleared := false
 
 # Has The Boy ever been beaten? Kept for his dialogue, and saved.
 var boy_defeated := false
+# Transient: set by the duel and consumed by the city, so he is found
+# on the floor the one time you walk back in having just beaten him.
+var boy_just_lost := false
 
 
 func queue_floor(floor_number: int) -> void:
