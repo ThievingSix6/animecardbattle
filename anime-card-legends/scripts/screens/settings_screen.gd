@@ -287,6 +287,9 @@ func _model_row() -> Control:
 			+ "These zones are still building their landmarks from primitives:"))
 		box.add_child(UI.caption("  " + ", ".join(missing) + "  (.glb preferred)"))
 
+	box.add_child(UI.caption(_emissive_text()))
+	box.add_child(UI.caption(_prop_text()))
+
 	if Models.has_player():
 		box.add_child(UI.label("Player model: loaded", Design.FS_BODY, Design.SUCCESS))
 		box.add_child(UI.caption(_player_animation_text()))
@@ -297,6 +300,46 @@ func _model_row() -> Control:
 			+ "the placeholder capsule. See res://art/models/README.txt."))
 
 	return box
+
+
+# Which models found a sidecar emissive map. A .glb exported without its
+# emission slot assigned looks flat and nothing says why, so this names
+# the ones that are currently unlit.
+func _emissive_text() -> String:
+	var lit: Array[String] = []
+	var dark: Array[String] = []
+
+	for zone in Campaign.ZONES:
+		var id := str(zone["id"])
+		if not Models.has_zone(id):
+			continue
+		if Models.has_emissive(Models.ZONE_FOLDER + id):
+			lit.append(id)
+		else:
+			dark.append(id)
+
+	if lit.is_empty() and dark.is_empty():
+		return ""
+	if dark.is_empty():
+		return "Emissive maps: all loaded models have one."
+	if lit.is_empty():
+		return ("Emissive maps: none found. Drop <model>_emissive.png beside "
+			+ "the model, or in a folder named after it. See art/models/props/README.txt.")
+	return "Emissive maps: %s lit  ·  %s has none" % [", ".join(lit), ", ".join(dark)]
+
+
+# The two shared props the city and the portal look for.
+func _prop_text() -> String:
+	var missing: Array[String] = []
+	var props: Array[String] = ["building", "portal"]
+	for prop in props:
+		if not Models.has_prop(prop):
+			missing.append(prop)
+
+	if missing.is_empty():
+		return "Props: building and portal both loaded."
+	return ("Props: %s missing from res://art/models/props/ — "
+		+ "using built-in geometry instead.") % ", ".join(missing)
 
 
 # Which clips the loose name matching actually bound, so a mismatched

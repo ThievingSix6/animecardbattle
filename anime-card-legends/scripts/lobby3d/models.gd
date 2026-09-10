@@ -24,12 +24,21 @@ extends RefCounted
 
 const FOLDER := "res://art/models/"
 const ZONE_FOLDER := FOLDER + "zones/"
+const PROP_FOLDER := FOLDER + "props/"
+
+# Sidecar emissive maps. A .glb that was exported without its emission
+# slot assigned still ships the map as a loose file, so rather than make
+# you re-author the material, the loader picks it up from beside the
+# model.
+const IMAGE_EXTENSIONS: Array[String] = ["png", "jpg", "jpeg", "webp", "tga"]
+const EMISSIVE_ENERGY := 1.6
 
 # .glb is the format to prefer - one self-contained file, textures
 # included, no missing-texture surprises.
 const EXTENSIONS: Array[String] = ["glb", "gltf", "tscn", "scn", "escn", "dae", "obj", "fbx", "blend"]
 
 static var _cache: Dictionary = {}
+static var _emissive_cache: Dictionary = {}
 
 
 # --- Lookup -------------------------------------------------------------
@@ -57,6 +66,16 @@ static func zone_resource(zone_id: String) -> Resource:
 
 static func player_resource() -> Resource:
 	return _find(FOLDER + "player")
+
+
+# Shared scenery: building, portal, streetlight, and anything else the
+# worlds ask for by name.
+static func prop_resource(prop_name: String) -> Resource:
+	return _find(PROP_FOLDER + prop_name)
+
+
+static func has_prop(prop_name: String) -> bool:
+	return prop_resource(prop_name) != null
 
 
 static func has_zone(zone_id: String) -> bool:
@@ -101,12 +120,131 @@ static func spawn(resource: Resource) -> Node3D:
 	return null
 
 
+# Every spawn goes through here, so a sidecar emissive map is applied
+# wherever the model is used without each caller remembering to ask.
 static func spawn_zone(zone_id: String) -> Node3D:
-	return spawn(zone_resource(zone_id))
+	var node := spawn(zone_resource(zone_id))
+	apply_emissive(node, ZONE_FOLDER + zone_id)
+	return node
 
 
 static func spawn_player() -> Node3D:
-	return spawn(player_resource())
+	var node := spawn(player_resource())
+	apply_emissive(node, FOLDER + "player")
+	return node
+
+
+static func spawn_prop(prop_name: String) -> Node3D:
+	var node := spawn(prop_resource(prop_name))
+	apply_emissive(node, PROP_FOLDER + prop_name)
+	return node
+
+
+# --- Emissive sidecars ----------------------------------------------------
+#
+# Exporters routinely drop the emission slot, so the map arrives as a
+# loose texture_emissive.png next to the model instead of inside it.
+# Both of these are picked up, in this order:
+#
+#   art/models/zones/proving_emissive.png
+#   art/models/zones/proving/texture_emissive.png
+#
+# The second form exists because every exporter names the file the same
+# thing, so several of them cannot share one folder. Give the model a
+# folder of its own named after it and the original filename is fine.
+
+static func emissive_texture(base_path: String) -> Texture2D:
+	# Looked up once per model: the city spawns one building forty times
+	# and must not stat the filesystem forty times over.
+	if _emissive_cache.has(base_path):
+		return _emissive_cache[base_path]
+
+	var found := _scan_emissive(base_path)
+	_emissive_cache[base_path] = found
+	return found
+
+
+static func _scan_emissive(base_path: String) -> Texture2D:
+	for ext in IMAGE_EXTENSIONS:
+		var path := base_path + "_emissive." + ext
+		if ResourceLoader.exists(path):
+			return load(path)
+
+	# A folder named after the model: take any file with "emissive" in it.
+	var folder := base_path + "/"
+	var dir := DirAccess.open(folder)
+	if dir == null:
+		return null
+
+	var found: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir():
+			var lower := file_name.to_lower()
+			if lower.contains("emissive") or lower.contains("emission") or lower.contains("_glow"):
+				for ext in IMAGE_EXTENSIONS:
+					if lower.ends_with("." + ext):
+						found.append(folder + file_name)
+						break
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	if found.is_empty():
+		return null
+	found.sort()
+	return load(found[0])
+
+
+static func has_emissive(base_path: String) -> bool:
+	return emissive_texture(base_path) != null
+
+
+# Lights up every surface of the model with the sidecar map. Materials
+# that already carry their own emission are left alone - a correctly
+# exported model is never overridden.
+static func apply_emissive(root: Node3D, base_path: String, energy: float = EMISSIVE_ENERGY) -> bool:
+	if root == null:
+		return false
+
+	var texture := emissive_texture(base_path)
+	if texture == null:
+		return false
+
+	_light_surfaces(root, texture, energy)
+	return true
+
+
+static func _light_surfaces(node: Node, texture: Texture2D, energy: float) -> void:
+	if node is MeshInstance3D:
+		var mesh_node: MeshInstance3D = node
+		if mesh_node.mesh != null:
+			for i in mesh_node.mesh.get_surface_count():
+				_light_surface(mesh_node, i, texture, energy)
+
+	for child in node.get_children():
+		_light_surfaces(child, texture, energy)
+
+
+static func _light_surface(mesh_node: MeshInstance3D, surface: int, texture: Texture2D, energy: float) -> void:
+	var source: Material = mesh_node.get_surface_override_material(surface)
+	if source == null:
+		source = mesh_node.mesh.surface_get_material(surface)
+	if source == null or not (source is StandardMaterial3D):
+		return
+
+	var base: StandardMaterial3D = source
+	if base.emission_enabled and base.emission_texture != null:
+		return
+
+	# Duplicated so two instances of one model cannot fight over the
+	# same material resource.
+	var lit: StandardMaterial3D = base.duplicate()
+	lit.emission_enabled = true
+	lit.emission_texture = texture
+	lit.emission = Color.WHITE
+	lit.emission_energy_multiplier = energy
+	mesh_node.set_surface_override_material(surface, lit)
 
 
 # --- Measuring and fitting -----------------------------------------------
