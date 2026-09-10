@@ -10,7 +10,7 @@ import {
 
 const NAV = [
   { route: "menu", label: "Lobby", key: "1" },
-  { route: "tower", label: "Tower", key: "2" },
+  { route: "tower", label: "Campaign", key: "2" },
   { route: "team", label: "Team", key: "3" },
   { route: "collection", label: "Collection", key: "4" },
   { route: "summon", label: "Summon", key: "5" },

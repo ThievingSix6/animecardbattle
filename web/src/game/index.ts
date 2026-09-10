@@ -9,12 +9,17 @@ export * as Mutations from "./mutations";
 export * as EnemyFactory from "./enemyFactory";
 
 export { makeCard, cloneCard } from "./cardData";
-export type { CardData, PassiveType } from "./cardData";
+export type { CardData } from "./cardData";
 
 export { Rng, rng, hashString } from "./rng";
-export { buildStarters, generateBatch, generateOne } from "./cardGenerator";
-export { BattleSim, Combatant, computeDamage } from "./battleSim";
-export type { BattleEvent, Side } from "./battleSim";
+export { buildStarters, generateBatch, generateOne, pickSkillId } from "./cardGenerator";
+export { BattleSim, computeDamage } from "./battleSim";
+export { Combatant, turns, SECONDS_PER_TURN } from "./combatant";
+export * as Skills from "./skills";
+export * as Campaign from "./campaign";
+export * as AbilityText from "./abilityText";
+export type { BattleEvent } from "./battleSim";
+export type { Side } from "./combatant";
 export { buildFloor, tierFor } from "./enemyFactory";
 export { ProgressionSystem } from "./progression";
 export { CollectionSystem, TEAM_SIZE, SORTS } from "./collection";

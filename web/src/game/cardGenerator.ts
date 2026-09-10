@@ -4,8 +4,9 @@
 
 import * as Config from "./config";
 import type { Rarity, Role } from "./config";
-import { makeCard, type CardData, type PassiveType } from "./cardData";
+import { makeCard, type CardData } from "./cardData";
 import { Rng, rng } from "./rng";
+import { ROLE_FAMILIES, skillsInFamily, type SkillFamily } from "./skills";
 
 export const NAME_POOLS: Record<string, string[]> = {
   demon: [
@@ -81,23 +82,37 @@ export const ABILITIES: Record<Role, { basic: string[]; ult: string[] }> = {
   },
 };
 
-export const PASSIVE_NAMES = [
-  "Unbreakable Wall", "Killing Intent", "Sovereign's Vigil", "Chilling Aura", "Steadfast Tune",
-  "Eager Novice", "Steady Stance", "Radiant Precision", "Dawn's Blessing", "Burning Resolve",
-];
+/**
+ * Chance a card that qualifies rolls a build-defining legendary skill.
+ * Gated behind the top rarities, so pulling one is an event.
+ */
+const LEGENDARY_SKILL_CHANCE = 0.4;
 
-export const PASSIVES_BY_ROLE: Record<Role, PassiveType[]> = {
-  Tank: ["guardian_block_heal"],
-  DPS: ["lifesteal"],
-  Assassin: ["lifesteal"],
-  Healer: ["energy_surge"],
-  Support: ["energy_surge"],
-};
+/**
+ * Picks the card's passive.
+ *
+ * Every card gets one. The rarity curve is deliberately brutal — roughly
+ * four cards in five are Common — so gating passives behind rarity, as the
+ * old three-passive system did, left about 2% of the roster carrying a
+ * skill and made the library effectively invisible. Rarity instead governs
+ * which families are reachable and how hard the card's stats hit; the
+ * passive is what makes each card mechanically distinct.
+ */
+export function pickSkillId(role: Role, rarity: Rarity, r: Rng | typeof rng): string {
+  const apex = Config.rarityIndex(rarity) >= Config.rarityIndex("Legendary");
 
-export const PASSIVE_ODDS: Record<string, number> = {
-  Common: 0.0, Uncommon: 0.10, Rare: 0.25, Epic: 0.45,
-  Legendary: 0.75, Mythic: 1.0, Secret: 1.0, Awakened: 1.0,
-};
+  let family: SkillFamily;
+  if (apex && r.randf() < LEGENDARY_SKILL_CHANCE) {
+    family = "legendary";
+  } else {
+    const pool = ROLE_FAMILIES[role] ?? ["offense"];
+    family = pool[r.randi(pool.length)];
+  }
+
+  const options = skillsInFamily(family);
+  if (options.length === 0) return "";
+  return options[r.randi(options.length)].id;
+}
 
 /**
  * The opening hand. Seeded per name so a starter rolls identical stats on
@@ -127,7 +142,7 @@ export function buildStarters(): CardData[] {
       speed: Math.max(4, Math.floor(r.randfRange(base.speed[0], base.speed[1]) * shape.speed)),
       basicAbility: r.pick(options.basic),
       ultimateAbility: r.pick(options.ult),
-      passiveAbility: r.pick(PASSIVE_NAMES),
+      skillId: pickSkillId(archetype.role, archetype.rarity, r),
       basicTargetMode: "active",
       ultimateTargetMode: "active",
     });
@@ -177,11 +192,10 @@ export function generateOne(usedNames: Set<string>): CardData | null {
     speed: Math.max(4, Math.floor(rng.randfRange(base.speed[0], base.speed[1]) * shape.speed)),
     basicAbility: rng.pick(options.basic),
     ultimateAbility: rng.pick(options.ult),
-    passiveAbility: rng.pick(PASSIVE_NAMES),
+    skillId: pickSkillId(role, rarity, rng),
   });
 
   applyTargeting(card, role);
-  applyPassive(card, role, rarity);
   return card;
 }
 
@@ -223,25 +237,3 @@ function applyTargeting(card: CardData, role: Role): void {
   }
 }
 
-function applyPassive(card: CardData, role: Role, rarity: Rarity): void {
-  if (rng.randf() > (PASSIVE_ODDS[rarity] ?? 0)) return;
-
-  const options = PASSIVES_BY_ROLE[role] ?? [];
-  if (options.length === 0) return;
-
-  card.passiveType = rng.pick(options);
-  switch (card.passiveType) {
-    case "guardian_block_heal":
-      card.passiveChance = rng.randfRange(0.12, 0.30);
-      card.passiveValue = rng.randfRange(0.12, 0.30);
-      break;
-    case "lifesteal":
-      card.passiveChance = 1.0;
-      card.passiveValue = rng.randfRange(0.10, 0.25);
-      break;
-    case "energy_surge":
-      card.passiveChance = 1.0;
-      card.passiveValue = rng.randfRange(5, 15);
-      break;
-  }
-}

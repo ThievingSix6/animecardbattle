@@ -28,14 +28,15 @@ const mod = await import(`data:text/javascript;base64,${Buffer.from(code).toStri
 
 const { BattleSim, buildFloor, ProgressionSystem, buildStarters } = mod;
 
-const FLOORS = [1, 3, 5, 10, 15, 20, 25, 30, 40, 50];
+// One mid-zone stage and one boss from each of the six zones.
+const FLOORS = [3, 7, 10, 14, 17, 21, 24, 28, 31, 35, 38, 42];
 const RUNS = 60;
 const MAX_ROUNDS = 500;
 
 let failures = 0;
 
-console.log("floor  win%   avg rounds   avg dmg/hit   result");
-console.log("-".repeat(58));
+console.log("floor  zone                     win%   rounds   dmg/hit   result");
+console.log("-".repeat(74));
 
 for (const floor of FLOORS) {
   const progression = new ProgressionSystem();
@@ -80,12 +81,14 @@ for (const floor of FLOORS) {
   if (stalled > 0) { verdict = `STALLED ${stalled}/${RUNS}`; failures++; }
   else if (avgRounds < 2) { verdict = "TOO FAST"; failures++; }
 
+  const zone = mod.Campaign.zoneForFloor(floor);
+  const label = mod.Campaign.stageLabel(floor);
   console.log(
-    `${String(floor).padStart(5)}  ${winPct.toFixed(0).padStart(4)}%  ${avgRounds.toFixed(1).padStart(10)}  ${avgDmg.toFixed(0).padStart(12)}   ${verdict}`,
+    `${String(floor).padStart(5)}  ${(zone.name + " " + label).padEnd(24)} ${winPct.toFixed(0).padStart(4)}%  ${avgRounds.toFixed(1).padStart(7)}  ${avgDmg.toFixed(0).padStart(8)}   ${verdict}`,
   );
 }
 
-console.log("-".repeat(58));
+console.log("-".repeat(74));
 
 if (failures > 0) {
   console.error(`\n${failures} floor(s) failed the sanity check.`);

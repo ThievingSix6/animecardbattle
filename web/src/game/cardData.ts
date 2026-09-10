@@ -2,8 +2,6 @@
 
 import type { Element, Rarity, Role, TargetMode } from "./config";
 
-export type PassiveType = "" | "guardian_block_heal" | "lifesteal" | "energy_surge";
-
 export interface CardData {
   cardId: string;
   cardName: string;
@@ -23,15 +21,13 @@ export interface CardData {
   speed: number;
 
   basicAbility: string;
-  passiveAbility: string;
   ultimateAbility: string;
 
   basicTargetMode: TargetMode;
   ultimateTargetMode: TargetMode;
 
-  passiveType: PassiveType;
-  passiveChance: number;
-  passiveValue: number;
+  /** Id into the skill library; "" means this card has no passive. */
+  skillId: string;
 
   sellValue: number;
   locked: boolean;
@@ -43,9 +39,9 @@ export function makeCard(partial: Partial<CardData> = {}): CardData {
     faction: "", element: "Fire", role: "DPS", originTag: "",
     rarity: "Common", modifier: "Normal",
     attack: 10, defense: 10, health: 100, speed: 10,
-    basicAbility: "", passiveAbility: "", ultimateAbility: "",
+    basicAbility: "", ultimateAbility: "",
     basicTargetMode: "active", ultimateTargetMode: "active",
-    passiveType: "", passiveChance: 0, passiveValue: 0,
+    skillId: "",
     sellValue: 10, locked: false,
     ...partial,
   };

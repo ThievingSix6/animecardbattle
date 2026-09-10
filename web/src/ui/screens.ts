@@ -2,6 +2,8 @@
 
 import * as Config from "../game/config";
 import * as Design from "../game/design";
+import * as Skills from "../game/skills";
+import * as Campaign from "../game/campaign";
 import type { CardData } from "../game/cardData";
 import { SORTS, TEAM_SIZE } from "../game/collection";
 import { ORIGIN_LABELS, ORIGINS } from "../game/cardGenerator";
@@ -27,7 +29,7 @@ export function menuScreen(root: HTMLElement, nav: Navigate, sub: Subscribe): vo
   const hero = el("div", { class: "hero" }, [
     el("h1", {}, ["Anime Card Legends"]),
     el("p", {}, [
-      "Summon a roster, build a five-card team, and send them up the tower. " +
+      "Summon a roster, build a five-card team, and fight through six zones. " +
       "Combat resolves automatically — your decisions are which cards to pull, " +
       "merge, and field.",
     ]),
@@ -35,7 +37,7 @@ export function menuScreen(root: HTMLElement, nav: Navigate, sub: Subscribe): vo
 
   hero.append(
     el("div", { class: "menu-actions" }, [
-      button("⚔  Enter the Tower", () => nav("tower"), "btn primary big"),
+      button("⚔  Campaign", () => nav("tower"), "btn primary big"),
       button("✦  Summon", () => nav("summon"), "btn big"),
       button("👥  Team", () => nav("team"), "btn big"),
     ]),
@@ -43,7 +45,7 @@ export function menuScreen(root: HTMLElement, nav: Navigate, sub: Subscribe): vo
 
   const uniqueTile = tile("0", "Unique cards");
   const poolTile = tile("0", "Cards in pool");
-  const floorTile = tile("0", "Highest floor");
+  const floorTile = tile("0", "Stages cleared");
   const rateTile = tile("0", "Auto-roll rate");
   const stats = el("div", { class: "stat-strip" }, [uniqueTile, poolTile, floorTile, rateTile]);
 
@@ -64,7 +66,7 @@ export function menuScreen(root: HTMLElement, nav: Navigate, sub: Subscribe): vo
   const refreshStats = () => {
     uniqueTile.querySelector("b")!.textContent = commas(game.collection.uniqueCount());
     poolTile.querySelector("b")!.textContent = commas(game.gacha.totalPoolSize());
-    floorTile.querySelector("b")!.textContent = `${game.progression.highestFloor}/${Config.MAX_FLOOR}`;
+    floorTile.querySelector("b")!.textContent = `${game.progression.highestFloor}/${Campaign.TOTAL_FLOORS}`;
     rateTile.querySelector("b")!.textContent = `${game.progression.rollInterval().toFixed(1)}s`;
   };
 
@@ -117,37 +119,64 @@ function weatherBanner(): HTMLElement {
 export function towerScreen(root: HTMLElement, nav: Navigate): void {
   clear(root);
 
+  const highest = game.progression.highestFloor;
+
+  root.append(
+    el("h2", { class: "screen-title" }, ["Campaign"]),
+    el("p", { class: "screen-sub" }, [
+      `Six zones of ${Campaign.STAGES_PER_ZONE} stages, each ending in a boss. ` +
+      `Clear a zone's boss to open the next. ${highest} of ${Campaign.TOTAL_FLOORS} stages cleared.`,
+    ]),
+    teamStrip(nav),
+  );
+
+  for (let z = 0; z < Campaign.ZONES.length; z++) {
+    root.append(zoneBlock(z, highest, nav));
+  }
+}
+
+function zoneBlock(zoneIndex: number, highest: number, nav: Navigate): HTMLElement {
+  const zone = Campaign.zoneAt(zoneIndex);
+  const unlocked = Campaign.zoneUnlocked(zoneIndex, highest);
+  const cleared = Campaign.stagesClearedIn(zoneIndex, highest);
+  const complete = Campaign.zoneComplete(zoneIndex, highest);
+
+  const head = el("div", { class: "row" }, [
+    el("div", { class: "grow" }, [
+      el("b", { style: `color:${unlocked ? zone.accent : "#646c7e"}` }, [
+        `${Design.elementIcon(zone.element)}  ${zone.name}`,
+      ]),
+      el("div", { class: "hint", style: "margin-top:2px" }, [zone.subtitle]),
+    ]),
+    el("span", {
+      class: "coin",
+      style: `border-color:${complete ? "#3ecf7e" : "var(--hairline)"}`,
+    }, [
+      complete ? "✓ Cleared" : unlocked ? `${cleared}/${Campaign.STAGES_PER_ZONE}` : "🔒 Locked",
+    ]),
+  ]);
+
   const grid = el("div", { class: "floors" });
-  for (let f = 1; f <= Config.MAX_FLOOR; f++) {
-    const unlocked = game.progression.isUnlocked(f);
-    const cleared = f <= game.progression.highestFloor;
-    const isBoss = game.progression.isBossFloor(f);
+  for (let s = 0; s < Campaign.STAGES_PER_ZONE; s++) {
+    const floorNumber = Campaign.floorFor(zoneIndex, s);
+    const isBoss = Campaign.isBossStage(s);
+    const isCleared = floorNumber <= highest;
+    const isOpen = game.progression.isUnlocked(floorNumber);
 
     const b = el("button", {
-      class: `floor${cleared ? " cleared" : ""}${isBoss ? " boss" : ""}`,
+      class: `floor${isCleared ? " cleared" : ""}${isBoss ? " boss" : ""}`,
+      title: isBoss ? zone.boss : `Stage ${s + 1}`,
     }, [
-      isBoss ? `👑 ${f}` : String(f),
-      el("small", {}, [cleared ? "cleared" : isBoss ? "boss" : "locked"]),
+      isBoss ? "👑" : String(s + 1),
+      el("small", {}, [isCleared ? "cleared" : isBoss ? "boss" : isOpen ? "ready" : "locked"]),
     ]);
 
-    if (!unlocked) b.disabled = true;
-    else {
-      b.querySelector("small")!.textContent = cleared ? "cleared" : isBoss ? "boss" : "ready";
-      b.addEventListener("click", () => nav(`battle:${f}`));
-    }
+    if (!isOpen) b.disabled = true;
+    else b.addEventListener("click", () => nav(`battle:${floorNumber}`));
     grid.append(b);
   }
 
-  root.append(
-    el("h2", { class: "screen-title" }, ["The Tower"]),
-    el("p", { class: "screen-sub" }, [
-      `Highest floor cleared: ${game.progression.highestFloor}. ` +
-      `Every ${Config.BOSS_EVERY}th floor is a boss that grants a roll pack.`,
-    ]),
-    teamStrip(nav),
-    el("div", { class: "section" }, ["Floors"]),
-    grid,
-  );
+  return el("div", { class: "panel", style: "margin-bottom:16px" }, [head, el("div", { style: "height:12px" }), grid]);
 }
 
 function teamStrip(nav: Navigate): HTMLElement {
@@ -253,11 +282,25 @@ function openCardDetail(card: CardData, refresh: () => void): void {
     statLine("Speed", compact(card.speed)),
     statLine("Basic", `${card.basicAbility} (${card.basicTargetMode})`),
     statLine("Ultimate", `${card.ultimateAbility} (${card.ultimateTargetMode})`),
-    statLine("Passive", card.passiveType ? `${card.passiveAbility} — ${card.passiveType}` : "—"),
     statLine("Copies", commas(copies)),
     statLine("Sell value", `${commas(card.sellValue)} gold`),
     statLine("Pull odds", formatOdds(game.gacha.cardOdds(card))),
   );
+
+  const skill = Skills.skillById(card.skillId);
+  if (skill) {
+    const color = Skills.FAMILY_COLOR[skill.family];
+    panel.append(
+      el("div", { class: "skill-block", style: `border-color:${color}` }, [
+        el("div", { class: "skill-head" }, [
+          el("span", { class: "skill-icon", style: `color:${color}` }, [Skills.FAMILY_ICON[skill.family]]),
+          el("b", { style: `color:${color}` }, [skill.name]),
+          el("span", { class: "skill-family" }, [Skills.FAMILY_LABEL[skill.family]]),
+        ]),
+        el("p", {}, [skill.text]),
+      ]),
+    );
+  }
 
   const actions = el("div", { class: "row", style: "justify-content:center;margin-top:16px" });
 

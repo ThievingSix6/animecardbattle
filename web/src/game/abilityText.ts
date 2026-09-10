@@ -9,6 +9,7 @@
 
 import * as Config from "./config";
 import type { CardData } from "./cardData";
+import { FAMILY_LABEL, skillById } from "./skills";
 
 export function basic(card: CardData): string {
   return attackText(card.basicTargetMode, Config.BASIC_ABILITY_MULT);
@@ -18,17 +19,13 @@ export function ultimate(card: CardData): string {
   return `${attackText(card.ultimateTargetMode, Config.ULTIMATE_MULT)} Charges at full energy.`;
 }
 
+/** The passive's own description, straight from the skill library. */
 export function passive(card: CardData): string {
-  switch (card.passiveType) {
-    case "guardian_block_heal":
-      return `${pct(card.passiveChance)} chance to intercept an attack aimed at an ally, blocking it entirely and healing ${pct(card.passiveValue)} of max HP.`;
-    case "lifesteal":
-      return `Heals for ${pct(card.passiveValue)} of all damage dealt.`;
-    case "energy_surge":
-      return `Generates +${Math.floor(card.passiveValue)} bonus energy on every hit.`;
-    default:
-      return "";
-  }
+  return skillById(card.skillId)?.text ?? "";
+}
+
+export function passiveName(card: CardData): string {
+  return skillById(card.skillId)?.name ?? "";
 }
 
 /** The line shown on the card face: prefers the ultimate, the signature move. */
@@ -52,11 +49,8 @@ export function tags(card: CardData): string[] {
   if (card.basicTargetMode === "aoe") out.push("AoE Basic");
   else if (card.basicTargetMode === "backline") out.push("Backline Basic");
 
-  switch (card.passiveType) {
-    case "guardian_block_heal": out.push("Guardian"); break;
-    case "lifesteal": out.push("Lifesteal"); break;
-    case "energy_surge": out.push("Energy Surge"); break;
-  }
+  const skill = skillById(card.skillId);
+  if (skill) out.push(FAMILY_LABEL[skill.family]);
 
   return out;
 }

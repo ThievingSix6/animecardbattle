@@ -853,3 +853,27 @@ main {
 .talent b { display: block; }
 .talent .eff { color: var(--text-dim); font-size: var(--fs-small); }
 .talent .lvl { color: var(--accent); font-variant-numeric: tabular-nums; font-weight: 700; }
+
+/* ---------------- SKILL BLOCK ---------------- */
+
+.skill-block {
+  margin-top: var(--s4);
+  border: 1px solid var(--hairline);
+  border-left-width: 3px;
+  border-radius: var(--r-sm);
+  padding: var(--s3);
+  background: rgba(8, 10, 16, 0.5);
+}
+
+.skill-head { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s2); }
+.skill-icon { font-size: var(--fs-heading); }
+
+.skill-family {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.skill-block p { margin: 0; font-size: var(--fs-small); color: var(--text-dim); line-height: 1.5; }

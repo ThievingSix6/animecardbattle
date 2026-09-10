@@ -1,65 +1,31 @@
-// Ported from scripts/battle/battle_sim.gd + combatant.gd
-//
 // The battle rules engine. Runs a lane duel: only the front card on each
 // side fights; when one falls the next steps up. Emits events describing
 // what happened so a view can animate them.
 //
 // Contains zero UI code, which keeps the combat rules testable and lets
 // the presentation change without touching balance.
+//
+// Skills hook into the flow at named points (entry, turn start, outgoing
+// and incoming damage, kills, deaths). The engine owns sequencing and the
+// skill library owns behaviour, so a new passive is a new entry in
+// skills.ts and no change here.
 
 import * as Config from "./config";
-import type { CardData } from "./cardData";
+import { makeCard, type CardData } from "./cardData";
+import { Combatant, type Side } from "./combatant";
 import { rng } from "./rng";
+import { skillById, type SkillApi, type SkillCtx, type SkillHooks } from "./skills";
 
-export type Side = "player" | "enemy";
-
-export class Combatant {
-  hp: number;
-  maxHp: number;
-  energy = 0;
-  attackCount = 0;
-  alive = true;
-
-  constructor(
-    readonly data: CardData,
-    readonly side: Side,
-    readonly index: number,
-  ) {
-    this.maxHp = data.health;
-    this.hp = data.health;
-  }
-
-  /** Returns true when this hit was the killing blow. */
-  takeDamage(amount: number): boolean {
-    this.hp = Math.max(0, this.hp - amount);
-    if (this.hp === 0 && this.alive) {
-      this.alive = false;
-      return true;
-    }
-    return false;
-  }
-
-  heal(amount: number): number {
-    const before = this.hp;
-    this.hp = Math.min(this.maxHp, this.hp + amount);
-    return this.hp - before;
-  }
-
-  gainEnergy(amount: number): void {
-    this.energy = Math.min(Config.ENERGY_MAX, this.energy + amount);
-  }
-
-  hpRatio(): number {
-    return this.hp / Math.max(1, this.maxHp);
-  }
-}
+export { Combatant } from "./combatant";
+export type { Side } from "./combatant";
 
 export type BattleEvent =
   | { type: "attack"; attacker: Combatant; target: Combatant; damage: number }
   | { type: "ability"; user: Combatant; ability: string; targets: Combatant[]; damage: number; kind: "basic" | "ultimate" }
-  | { type: "passive"; source: Combatant; amount: number; note: string }
+  | { type: "skill"; source: Combatant; skill: string; note: string; amount: number }
   | { type: "healed"; target: Combatant; amount: number }
   | { type: "died"; who: Combatant }
+  | { type: "summoned"; owner: Combatant; who: Combatant }
   | { type: "actives"; playerIndex: number; enemyIndex: number }
   | { type: "ended"; playerWon: boolean };
 
@@ -69,14 +35,18 @@ export function computeDamage(attack: number, defense: number): number {
   return Math.max(1, attack - Math.floor(defense * Config.DEFENSE_FACTOR));
 }
 
+type HookName = keyof SkillHooks;
+
 export class BattleSim {
   players: Combatant[] = [];
   enemies: Combatant[] = [];
   playerIndex = 0;
   enemyIndex = 0;
   running = false;
+  turn = 0;
 
   private listeners: BattleListener[] = [];
+  private entered = new Set<string>();
 
   on(listener: BattleListener): void {
     this.listeners.push(listener);
@@ -91,6 +61,8 @@ export class BattleSim {
     this.enemies = enemyCards.map((c, i) => new Combatant(c, "enemy", i));
     this.playerIndex = 0;
     this.enemyIndex = 0;
+    this.turn = 0;
+    this.entered.clear();
     this.running = true;
   }
 
@@ -123,6 +95,66 @@ export class BattleSim {
     return list.some((c) => c.alive);
   }
 
+  // --- skill plumbing ---------------------------------------------------
+
+  private api: SkillApi = {
+    turn: 0,
+    random: () => rng.randf(),
+    allies: (of) => this.team(of.side),
+    enemies: (of) => this.opposing(of.side),
+    activeEnemy: (of) => {
+      const list = this.opposing(of.side);
+      const idx = this.advance(list, 0);
+      return idx === -1 ? null : list[idx];
+    },
+    lowestHpAlly: (of, includeSelf = true) => {
+      const pool = this.team(of.side).filter((a) => a.alive && (includeSelf || a.id !== of.id));
+      if (pool.length === 0) return null;
+      return pool.reduce((a, b) => (a.hpRatio() <= b.hpRatio() ? a : b));
+    },
+    strongestAlly: (of, includeSelf = true) => {
+      const pool = this.team(of.side).filter((a) => a.alive && (includeSelf || a.id !== of.id));
+      if (pool.length === 0) return null;
+      return pool.reduce((a, b) => (a.attack >= b.attack ? a : b));
+    },
+    nextAlly: (of) => {
+      const list = this.team(of.side);
+      for (let i = of.index + 1; i < list.length; i++) if (list[i].alive) return list[i];
+      return null;
+    },
+    note: (source, text, amount = 0) => {
+      const skill = skillById(source.data.skillId);
+      this.emit({ type: "skill", source, skill: skill?.name ?? "Passive", note: text, amount });
+    },
+    summon: (owner, name, statPct, lifespan, count) => this.doSummon(owner, name, statPct, lifespan, count),
+    damage: (source, target, amount, label) => this.directDamage(source, target, amount, label),
+  };
+
+  private newCtx(self: Combatant, patch: Partial<SkillCtx> = {}): SkillCtx {
+    this.api.turn = this.turn;
+    return { self, api: this.api, damage: 0, blocked: false, prevented: false, ...patch };
+  }
+
+  /** Runs one hook for one combatant and returns the (possibly edited) ctx. */
+  private fire(hook: HookName, self: Combatant, patch: Partial<SkillCtx> = {}): SkillCtx {
+    const ctx = this.newCtx(self, patch);
+    if (!self.alive && hook !== "death") return ctx;
+
+    const skill = skillById(self.data.skillId);
+    const fn = skill?.hooks[hook];
+    if (fn) fn(ctx);
+    return ctx;
+  }
+
+  private fireTeam(hook: HookName, list: Combatant[], patch: Partial<SkillCtx> = {}): void {
+    for (const c of [...list]) {
+      if (!c.alive) continue;
+      this.fire(hook, c, patch);
+    }
+  }
+
+  // --- round loop -------------------------------------------------------
+
   /**
    * Advances the lanes and reports who acts, in order. The view drives the
    * actual turns so it can pace them; the rules stay in here.
@@ -130,6 +162,7 @@ export class BattleSim {
   prepareRound(): Side[] {
     if (!this.running) return [];
 
+    this.turn++;
     this.playerIndex = this.advance(this.players, this.playerIndex);
     this.enemyIndex = this.advance(this.enemies, this.enemyIndex);
 
@@ -142,11 +175,47 @@ export class BattleSim {
       return [];
     }
 
+    const player = this.players[this.playerIndex];
+    const enemy = this.enemies[this.enemyIndex];
+
+    // Entry hooks fire once, the first time a card reaches the front.
+    for (const c of [player, enemy]) {
+      if (this.entered.has(c.id)) continue;
+      this.entered.add(c.id);
+      this.fire("entry", c);
+    }
+
+    this.upkeep();
+    if (!this.checkEnd()) return [];
+
     this.emit({ type: "actives", playerIndex: this.playerIndex, enemyIndex: this.enemyIndex });
 
-    const playerFirst =
-      this.players[this.playerIndex].data.speed >= this.enemies[this.enemyIndex].data.speed;
+    const playerFirst = player.speed >= enemy.speed;
     return playerFirst ? ["player", "enemy"] : ["enemy", "player"];
+  }
+
+  /** Damage over time, buff expiry, summon lifespans, per-turn skills. */
+  private upkeep(): void {
+    for (const c of [...this.players, ...this.enemies]) {
+      if (!c.alive) continue;
+
+      const dot = c.tickDurations();
+      if (dot > 0) {
+        const died = c.takeDamage(dot);
+        this.emit({ type: "skill", source: c, skill: "Damage over time", note: `${c.data.cardName} suffers ${dot} from lingering wounds`, amount: dot });
+        if (died) this.onDeath(c, undefined);
+      }
+
+      if (c.summoned && c.alive) {
+        if (c.bump("lifespan", -1) <= 0) {
+          c.alive = false;
+          this.emit({ type: "died", who: c });
+        }
+      }
+    }
+
+    this.fireTeam("turnStart", this.players);
+    this.fireTeam("turnStart", this.enemies);
   }
 
   takeTurn(side: Side): void {
@@ -167,31 +236,27 @@ export class BattleSim {
     const attacker = attackers[attackerIdx];
     const target = defenders[defenderIdx];
 
-    // Basic attack, unless a guardian intercepts it.
-    if (!this.tryGuardian(defenders, target)) {
-      const damage = computeDamage(attacker.data.attack, target.data.defense);
-      this.deal(attacker, target, damage);
-      this.emit({ type: "attack", attacker, target, damage });
+    if (attacker.stunTurns > 0) {
+      this.emit({ type: "skill", source: attacker, skill: "Stunned", note: `${attacker.data.cardName} is stunned and loses the turn`, amount: 0 });
+      return;
     }
 
-    attacker.attackCount++;
-    let energy = Config.ENERGY_PER_ATTACK;
-    if (attacker.data.passiveType === "energy_surge") {
-      energy += Math.floor(attacker.data.passiveValue);
-    }
-    attacker.gainEnergy(energy);
+    this.strike(attacker, target, computeDamage(attacker.attack, target.defense), "basic");
+
+    attacker.attackCount += 1;
+    attacker.gainEnergy(Config.ENERGY_PER_ATTACK, Config.ENERGY_MAX);
 
     if (!this.checkEnd()) return;
 
     // Basic ability on a cadence.
-    if (attacker.attackCount >= Config.BASIC_ABILITY_EVERY) {
+    if (attacker.attackCount >= Config.BASIC_ABILITY_EVERY && attacker.silenceTurns <= 0) {
       attacker.attackCount = 0;
       this.useAbility(attacker, defenders, false);
       if (!this.checkEnd()) return;
     }
 
     // Ultimate at full energy.
-    if (attacker.alive && attacker.energy >= Config.ENERGY_MAX) {
+    if (attacker.alive && attacker.energy >= Config.ENERGY_MAX && attacker.silenceTurns <= 0) {
       attacker.energy = 0;
       this.useAbility(attacker, defenders, true);
       this.checkEnd();
@@ -206,18 +271,16 @@ export class BattleSim {
     const targets = this.resolveTargets(defenders, mode);
     if (targets.length === 0) return;
 
-    const damage = Math.floor(user.data.attack * multiplier);
+    const base = Math.floor(user.attack * multiplier);
     const struck: Combatant[] = [];
     for (const t of targets) {
-      if (this.tryGuardian(defenders, t)) continue;
-      this.deal(user, t, damage);
-      struck.push(t);
+      if (this.strike(user, t, base, "ability")) struck.push(t);
     }
 
     if (struck.length > 0) {
       this.emit({
         type: "ability", user, ability: abilityName, targets: struck,
-        damage, kind: ultimate ? "ultimate" : "basic",
+        damage: base, kind: ultimate ? "ultimate" : "basic",
       });
     }
   }
@@ -225,49 +288,119 @@ export class BattleSim {
   resolveTargets(defenders: Combatant[], mode: string): Combatant[] {
     switch (mode) {
       case "aoe":
-        return defenders.filter((d) => d.alive);
+        return defenders.filter((d) => d.isTargetable());
       case "backline": {
         for (let i = defenders.length - 1; i >= 0; i--) {
-          if (defenders[i].alive) return [defenders[i]];
+          if (defenders[i].isTargetable()) return [defenders[i]];
         }
         return [];
       }
       default: {
-        const idx = this.advance(defenders, 0);
-        return idx !== -1 ? [defenders[idx]] : [];
+        const idx = defenders.findIndex((d) => d.isTargetable());
+        return idx === -1 ? [] : [defenders[idx]];
       }
     }
   }
 
-  private deal(attacker: Combatant, target: Combatant, damage: number): void {
+  // --- damage pipeline ---------------------------------------------------
+
+  /**
+   * One hit, start to finish: outgoing skills, incoming skills, lethal
+   * cancellation, lifesteal, and the follow-up hooks. Returns false when
+   * the hit was blocked or the target could not be touched.
+   */
+  private strike(attacker: Combatant, target: Combatant, baseDamage: number, kind: "basic" | "ability"): boolean {
+    if (!target.isTargetable()) return false;
+
+    const out = this.fire("outgoing", attacker, { target, damage: baseDamage });
+    let damage = Math.max(1, Math.round(out.damage * (1 + attacker.modifier("damageDealt"))));
+
+    const inc = this.fire("incoming", target, { attacker, damage });
+    if (inc.blocked) {
+      this.emit({ type: "skill", source: target, skill: "Blocked", note: `${target.data.cardName} blocks ${attacker.data.cardName}`, amount: 0 });
+      return false;
+    }
+    damage = Math.max(1, inc.damage);
+
+    const wouldKill = damage >= target.hp + target.shield;
+    if (wouldKill) {
+      const save = this.fire("lethal", target, { attacker, damage });
+      if (save.prevented) {
+        if (kind === "basic") this.emit({ type: "attack", attacker, target, damage: target.hp });
+        this.afterHit(attacker, target, damage);
+        return true;
+      }
+    }
+
     const died = target.takeDamage(damage);
+    if (kind === "basic") this.emit({ type: "attack", attacker, target, damage });
 
-    if (attacker.data.passiveType === "lifesteal" && attacker.alive) {
-      const healedAmount = attacker.heal(Math.floor(damage * attacker.data.passiveValue));
-      if (healedAmount > 0) {
-        this.emit({ type: "healed", target: attacker, amount: healedAmount });
-      }
-    }
-
-    if (died) this.emit({ type: "died", who: target });
+    this.afterHit(attacker, target, damage);
+    if (died) this.onDeath(target, attacker);
+    return true;
   }
 
-  /** A living, non-active ally may intercept an incoming hit entirely. */
-  private tryGuardian(defenders: Combatant[], target: Combatant): boolean {
-    for (const guardian of defenders) {
-      if (!guardian.alive || guardian === target) continue;
-      if (guardian.data.passiveType !== "guardian_block_heal") continue;
-      if (rng.randf() > guardian.data.passiveChance) continue;
+  private afterHit(attacker: Combatant, target: Combatant, damage: number): void {
+    const steal = attacker.modifier("lifesteal");
+    if (steal > 0 && attacker.alive) {
+      const healed = attacker.heal(Math.floor(damage * steal));
+      if (healed > 0) this.emit({ type: "healed", target: attacker, amount: healed });
+    }
 
-      const amount = guardian.heal(Math.floor(guardian.maxHp * guardian.data.passiveValue));
-      this.emit({
-        type: "passive", source: guardian, amount,
-        note: `${guardian.data.cardName} intercepts the blow aimed at ${target.data.cardName}`,
+    this.fire("dealt", attacker, { target, damage });
+    this.fire("taken", target, { attacker, damage });
+  }
+
+  /** Damage from a skill rather than an attack — skips the attack hooks. */
+  private directDamage(source: Combatant, target: Combatant, amount: number, label: string): void {
+    if (!target.alive || amount <= 0) return;
+    const died = target.takeDamage(amount);
+    this.emit({ type: "skill", source, skill: label, note: `${label}: ${target.data.cardName} takes ${amount}`, amount });
+    if (died) this.onDeath(target, source);
+  }
+
+  private onDeath(who: Combatant, killer: Combatant | undefined): void {
+    this.emit({ type: "died", who });
+    this.fire("death", who, { attacker: killer });
+
+    for (const ally of this.team(who.side)) {
+      if (ally.alive && ally.id !== who.id) this.fire("allyDeath", ally, { other: who });
+    }
+
+    if (killer && killer.alive) this.fire("kill", killer, { other: who });
+  }
+
+  // --- summons ------------------------------------------------------------
+
+  private doSummon(owner: Combatant, name: string, statPct: number, lifespan: number, count: number): void {
+    const list = this.team(owner.side);
+    const bonus = 1 + Math.min(0.3, owner.count("souls") * 0.1);
+
+    for (let i = 0; i < count; i++) {
+      const card = makeCard({
+        cardId: `${owner.data.cardId}~summon${list.length}`,
+        cardName: name,
+        role: owner.data.role,
+        rarity: owner.data.rarity,
+        element: owner.data.element,
+        originTag: "summon",
+        basicAbility: "Strike",
+        ultimateAbility: "Strike",
+        attack: Math.max(1, Math.round(owner.data.attack * statPct * bonus)),
+        defense: Math.max(0, Math.round(owner.data.defense * statPct * bonus)),
+        health: Math.max(1, Math.round(owner.data.health * statPct * bonus)),
+        speed: owner.data.speed,
       });
-      return true;
+
+      const minion = new Combatant(card, owner.side, list.length);
+      minion.summoned = true;
+      minion.counters["lifespan"] = lifespan;
+      list.push(minion);
+      this.emit({ type: "summoned", owner, who: minion });
     }
-    return false;
   }
+
+  // --- end ---------------------------------------------------------------
 
   private checkEnd(): boolean {
     if (!this.running) return false;

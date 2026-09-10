@@ -3,28 +3,20 @@
 // encounter design can evolve on its own.
 
 import * as Config from "./config";
-import type { Element, Role } from "./config";
+import type { Role } from "./config";
 import { makeCard, type CardData } from "./cardData";
+import { pickSkillId } from "./cardGenerator";
 import { rng } from "./rng";
 import type { ProgressionSystem } from "./progression";
+import { zoneForFloor, type Zone } from "./campaign";
 
-interface Tier {
-  upto: number; element: Element; boss: string; names: string[]; roles: Role[];
-}
-
-export const TIERS: Tier[] = [
-  { upto: 9,    element: "Earth", boss: "Golem Warlord",       names: ["Training Golem", "Rusted Automaton", "Stone Sentinel"], roles: ["Tank", "DPS"] },
-  { upto: 19,   element: "Earth", boss: "Alpha Direwolf",      names: ["Feral Wolf", "Bandit Scout", "Marsh Lurker"],           roles: ["DPS", "Assassin", "Support"] },
-  { upto: 29,   element: "Dark",  boss: "The Bandit Kingpin",  names: ["Bandit Raider", "Rogue Mercenary", "Cutthroat"],        roles: ["DPS", "Assassin", "Tank"] },
-  { upto: 39,   element: "Dark",  boss: "High Cultist Mordrai", names: ["Dark Cultist", "Shadow Acolyte", "Void Priest"],        roles: ["DPS", "Healer", "Support"] },
-  { upto: 49,   element: "Light", boss: "The Ancient Titan",   names: ["Ancient Guardian", "Fallen Knight", "Wraith Sentinel"], roles: ["Tank", "DPS", "Assassin"] },
-  { upto: 9999, element: "Dark",  boss: "The Tower's Heart",   names: ["Tower Wraith", "Voidbound Horror", "Nameless Sentinel"], roles: ["Tank", "DPS", "Assassin"] },
-];
+type Tier = Zone;
 
 const BASE = { attack: 18.0, defense: 20.0, health: 200.0, speed: 8.0 };
 
+/** Enemy identity comes from the campaign zone that owns this floor. */
 export function tierFor(floorNumber: number): Tier {
-  return TIERS.find((t) => floorNumber <= t.upto) ?? TIERS[TIERS.length - 1];
+  return zoneForFloor(floorNumber);
 }
 
 export function buildFloor(floorNumber: number, progression: ProgressionSystem): CardData[] {
@@ -45,11 +37,18 @@ function build(tier: Tier, floorNumber: number, slot: number, scale: number, isB
   const shape = Config.ROLE_STATS[role] ?? Config.ROLE_STATS.DPS;
   const bossMult = isBoss ? Config.BOSS_STAT_MULT : 1.0;
 
+  // Enemies carry passives too, or the player's own skills fight nothing.
+  // Rank-and-file only start showing them once the early floors are past,
+  // so the opening zone stays a clean introduction to the basic loop.
+  const rarity = isBoss ? "Legendary" : "Common";
+  const wantsSkill = isBoss || floorNumber > 3;
+
   return makeCard({
+    skillId: wantsSkill ? pickSkillId(role, rarity, rng) : "",
     cardId: `enemy_${floorNumber}_${slot}`,
     cardName: isBoss ? tier.boss : rng.pick(tier.names),
     role,
-    rarity: isBoss ? "Legendary" : "Common",
+    rarity,
     modifier: "Normal",
     element: tier.element,
     originTag: "enemy",

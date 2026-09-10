@@ -66,9 +66,11 @@ export const ROLL_INTERVAL_MIN = 0.4;
 export const ROLL_INTERVAL_PER_LEVEL = 0.13;
 export const LUCK_PER_LEVEL = 0.02;
 
-// ---------------- TOWER ----------------
-export const MAX_FLOOR = 50;
-export const BOSS_EVERY = 5;
+// ---------------- TOWER / CAMPAIGN ----------------
+// Six zones of seven stages. BOSS_EVERY matches STAGES_PER_ZONE, which is
+// what makes the last stage of every zone a boss fight.
+export const MAX_FLOOR = 42;
+export const BOSS_EVERY = 7;
 export const FLOOR_STAT_SCALE = 0.12;
 export const BOSS_STAT_MULT = 1.6;
 export const FLOOR_GEM_BASE = 20;

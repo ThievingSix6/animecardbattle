@@ -8,6 +8,8 @@
 import * as Config from "../game/config";
 import * as Design from "../game/design";
 import * as AbilityText from "../game/abilityText";
+import * as Skills from "../game/skills";
+import * as Campaign from "../game/campaign";
 import * as Mutations from "../game/mutations";
 import { BattleSim, type BattleEvent, type Combatant, type Side } from "../game/battleSim";
 import { buildFloor, tierFor } from "../game/enemyFactory";
@@ -39,9 +41,9 @@ export function mountBattle(
   const tier = tierFor(floorNumber);
   const isBoss = game.progression.isBossFloor(floorNumber);
 
-  const floorChip = el("div", { class: "floor-chip" }, [
-    el("b", {}, [`Floor ${floorNumber}`]),
-    el("span", {}, [isBoss ? `Boss · ${tier.boss}` : `${tier.element} zone`]),
+  const floorChip = el("div", { class: "floor-chip", style: `border-color:${tier.accent}` }, [
+    el("b", {}, [`${tier.name} · ${Campaign.stageLabel(floorNumber)}`]),
+    el("span", {}, [isBoss ? tier.boss : `${tier.element} zone · floor ${floorNumber}`]),
   ]);
 
   const turnLabel = el("div", { class: "turn-counter" }, ["Preparing…"]);
@@ -116,15 +118,15 @@ export function mountBattle(
 
   sim.setup(game.getBattleTeam(), buildFloor(floorNumber, game.progression));
 
-  for (const c of sim.players) playerBench.append(makeBenchTile(c));
-  for (const c of sim.enemies) enemyBench.append(makeBenchTile(c));
+  for (const c of sim.players) addBenchTile(c);
+  for (const c of sim.enemies) addBenchTile(c);
 
   buildChallenges();
   renderActives();
   refreshTeamBars();
 
   sim.on(handleEvent);
-  write(`Floor ${floorNumber} — begin`, Design.rarityColor("Legendary"));
+  write(`${tier.name} — ${Campaign.stageLabel(floorNumber)} — begin`, Design.rarityColor("Legendary"));
 
   void run();
 
@@ -149,7 +151,7 @@ export function mountBattle(
       items.push(`Boss encounter — ${tier.boss} has ${Math.round((Config.BOSS_STAT_MULT - 1) * 100)}% higher stats`);
     }
 
-    items.push(`Zone affinity: ${tier.element} — ${sim.enemies.length} enemies on this floor`);
+    items.push(`${tier.name}: ${tier.element} affinity, ${sim.enemies.length} enemies`);
 
     const scale = game.progression.statMultiplier(floorNumber);
     if (scale > 1) {
@@ -192,9 +194,10 @@ export function mountBattle(
     const pips = el("div", { class: "dc-pips" });
     pips.append(pip(Design.elementIcon(card.element), Design.elementColor(card.element), card.element));
     pips.append(pip(Design.roleIcon(card.role), "#262c3d", card.role));
-    if (card.passiveType === "guardian_block_heal") pips.append(pip("🛡", "#3ecf7e", "Guardian"));
-    if (card.passiveType === "lifesteal") pips.append(pip("🩸", "#ef4444", "Lifesteal"));
-    if (card.passiveType === "energy_surge") pips.append(pip("⚡", "#f5c518", "Energy surge"));
+    const skill = Skills.skillById(card.skillId);
+    if (skill) {
+      pips.append(pip(Skills.FAMILY_ICON[skill.family], Skills.FAMILY_COLOR[skill.family], skill.name));
+    }
     if (card.ultimateTargetMode === "aoe") pips.append(pip("✳", "#a855f7", "AoE ultimate"));
     if (card.basicTargetMode === "backline") pips.append(pip("↯", "#3b82f6", "Backline basic"));
 
@@ -226,7 +229,7 @@ export function mountBattle(
         el("b", { class: "dc-ability-name" }, [AbilityText.headlineName(card)]),
         el("p", {}, [AbilityText.headlineBody(card)]),
         ...(passiveText
-          ? [el("p", { class: "dc-passive" }, [`${card.passiveAbility}: ${passiveText}`])]
+          ? [el("p", { class: "dc-passive" }, [`${AbilityText.passiveName(card)} — ${passiveText}`])]
           : []),
       ]),
       tags,
@@ -254,6 +257,11 @@ export function mountBattle(
   }
 
   // --- bench ---------------------------------------------------------
+
+  function addBenchTile(c: Combatant): void {
+    const row = c.side === "player" ? playerBench : enemyBench;
+    row.append(makeBenchTile(c));
+  }
 
   function makeBenchTile(c: Combatant): HTMLElement {
     const node = el("div", {
@@ -359,11 +367,18 @@ export function mountBattle(
         break;
       }
 
-      case "passive":
+      case "skill":
         refreshBench(event.source);
         refreshTeamBars();
-        floatText(event.source, `+${compact(event.amount)}`, "#3ecf7e");
-        write(`${event.note} (+${compact(event.amount)} HP)`, "#3ecf7e");
+        for (const c of [...sim.players, ...sim.enemies]) refreshBench(c);
+        if (event.amount > 0) floatText(event.source, `${compact(event.amount)}`, "#a855f7");
+        write(`✦ ${event.note}`, "#a855f7");
+        break;
+
+      case "summoned":
+        addBenchTile(event.who);
+        refreshTeamBars();
+        write(`${event.owner.data.cardName} summons ${event.who.data.cardName}`, "#8a6a42");
         break;
 
       case "healed":
@@ -426,7 +441,7 @@ export function mountBattle(
 
     panel.append(
       el("h2", { style: `color:${accent}` }, [playerWon ? "VICTORY" : "DEFEAT"]),
-      el("div", { class: "result-sub" }, [`Floor ${floorNumber} · ${turn} turns`]),
+      el("div", { class: "result-sub" }, [`${tier.name} · ${Campaign.stageLabel(floorNumber)} · ${turn} turns`]),
     );
 
     if (playerWon) {

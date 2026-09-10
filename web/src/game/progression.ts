@@ -70,8 +70,8 @@ export class ProgressionSystem {
   }
 
   packForFloor(floorNumber: number): string {
-    if (floorNumber >= 45) return "boss";
-    if (floorNumber >= 20) return "gold";
+    if (floorNumber >= 35) return "boss";
+    if (floorNumber >= 15) return "gold";
     return "bronze";
   }
 
