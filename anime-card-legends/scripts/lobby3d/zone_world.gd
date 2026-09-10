@@ -17,6 +17,13 @@ extends Node3D
 # strand the player on a ledge they are unable to climb back onto.
 # =========================================================
 
+# How tall a zone's imported landmark stands at each stage. The same
+# model is reused for all seven fights and simply grows, so one export
+# per zone carries the whole difficulty curve.
+const MODEL_HEIGHT_FIRST := 4.5
+const MODEL_HEIGHT_LAST := 9.5
+const MODEL_HEIGHT_BOSS := 16.0
+
 const GROUND_RADIUS := 46.0
 const PATH_RADIUS := 13.0
 const PATH_START_Z := -8.0
@@ -191,7 +198,7 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 	root.position = origin
 	add_child(root)
 
-	# Monolith - taller and broader the deeper into the zone it sits.
+	# Landmark - taller and broader the deeper into the zone it sits.
 	var progress := float(stage_index) / float(Campaign.STAGES_PER_ZONE - 1)
 	var height := 3.0 + progress * 5.0
 	var width := 1.6 + progress * 0.9
@@ -199,32 +206,39 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 		height = 11.0
 		width = 3.4
 
-	var body := StaticBody3D.new()
-	root.add_child(body)
+	# An imported model for this zone replaces the procedural monolith,
+	# reusing the one export at a size that grows stage by stage.
+	var imported := _build_stage_model(root, stage_index, is_boss, tint)
+	if imported > 0.0:
+		height = imported
 
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(width, height, width)
-	mesh.mesh = box
-	mesh.position.y = height * 0.5
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(str(zone["ground"])).lerp(Color.BLACK, 0.35)
-	mat.roughness = 0.7
-	mat.emission_enabled = true
-	mat.emission = tint
-	mat.emission_energy_multiplier = 0.25 + progress * 0.4
-	mesh.material_override = mat
-	body.add_child(mesh)
+	if imported <= 0.0:
+		var body := StaticBody3D.new()
+		root.add_child(body)
 
-	var shape := CollisionShape3D.new()
-	var box_shape := BoxShape3D.new()
-	box_shape.size = Vector3(width, height, width)
-	shape.shape = box_shape
-	shape.position.y = height * 0.5
-	body.add_child(shape)
+		var mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(width, height, width)
+		mesh.mesh = box
+		mesh.position.y = height * 0.5
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(str(zone["ground"])).lerp(Color.BLACK, 0.35)
+		mat.roughness = 0.7
+		mat.emission_enabled = true
+		mat.emission = tint
+		mat.emission_energy_multiplier = 0.25 + progress * 0.4
+		mesh.material_override = mat
+		body.add_child(mesh)
+
+		var shape := CollisionShape3D.new()
+		var box_shape := BoxShape3D.new()
+		box_shape.size = Vector3(width, height, width)
+		shape.shape = box_shape
+		shape.position.y = height * 0.5
+		body.add_child(shape)
 
 	# Crown so the boss monolith reads differently at a distance.
-	if is_boss:
+	if is_boss and imported <= 0.0:
 		var crown := MeshInstance3D.new()
 		var spike := CylinderMesh.new()
 		spike.top_radius = 0.0
@@ -288,6 +302,53 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 		"pad": pad,
 		"base_color": tint,
 	})
+
+
+# Instances res://art/models/zones/<zone id>.glb at this stage, sized to
+# the stage's place in the run. Returns the height it ended up, or 0.0
+# when the zone has no model and the procedural monolith should be used.
+func _build_stage_model(root: Node3D, stage_index: int, is_boss: bool, tint: Color) -> float:
+	var zone_id := str(zone["id"])
+	var model := Models.spawn_zone(zone_id)
+	if model == null:
+		return 0.0
+
+	var progress := float(stage_index) / float(Campaign.STAGES_PER_ZONE - 1)
+	var height := lerpf(MODEL_HEIGHT_FIRST, MODEL_HEIGHT_LAST, progress)
+	if is_boss:
+		height = MODEL_HEIGHT_BOSS
+
+	root.add_child(model)
+	Models.fit_height(model, height)
+
+	# A little rotation per stage so seven copies of one model do not
+	# read as seven copies of one model.
+	model.rotation.y = float(stage_index) * 0.7
+
+	# Collision matched to whatever was imported, so the landmark is
+	# solid without the model needing collision shapes of its own.
+	var size := Models.fitted_size(model)
+	var body := StaticBody3D.new()
+	root.add_child(body)
+
+	var shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = Vector3(maxf(size.x, 1.0), height, maxf(size.z, 1.0))
+	shape.shape = box_shape
+	shape.position.y = height * 0.5
+	body.add_child(shape)
+
+	# The stage's state colour still has to read at a distance, so an
+	# uncleared or locked stage is lit rather than repainted - the
+	# imported textures stay intact.
+	var wash := OmniLight3D.new()
+	wash.position = Vector3(0.0, height * 0.55, 0.0)
+	wash.light_color = tint
+	wash.light_energy = 1.4 + progress * 0.8
+	wash.omni_range = maxf(size.x, size.z) + height
+	root.add_child(wash)
+
+	return height
 
 
 func _stage_caption(stage_index: int, floor_number: int, is_boss: bool, cleared: bool, unlocked: bool) -> String:
