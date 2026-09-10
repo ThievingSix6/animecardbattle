@@ -35,8 +35,11 @@ var zone_index := 0
 
 var player: LobbyPlayer
 var hud: LobbyHUD
+var portal: Portal
 var _stages: Array[Dictionary] = []
 var _current: Dictionary = {}
+var _interact_held := false
+var _menu: TravelMenu
 
 
 func _ready() -> void:
@@ -54,6 +57,7 @@ func _ready() -> void:
 	_build_ground()
 	_build_stages()
 	_build_props()
+	_build_portal()
 	_build_player()
 	_build_hud()
 
@@ -65,18 +69,48 @@ func _bounce_to_slots() -> void:
 func _process(_delta: float) -> void:
 	if player == null:
 		return
+	if _menu != null and is_instance_valid(_menu):
+		return
+
 	_update_proximity()
+	_handle_interact()
+
+
+# Edge-triggered: holding ENTER must not reopen the travel menu every
+# frame the moment it closes.
+func _handle_interact() -> void:
+	var pressed := Input.is_key_pressed(KEY_ENTER) or Input.is_key_pressed(KEY_KP_ENTER)
+	if not pressed:
+		_interact_held = false
+		return
+	if _interact_held:
+		return
+	_interact_held = true
 
 	if _current.is_empty():
 		return
-	if Input.is_key_pressed(KEY_ENTER) or Input.is_key_pressed(KEY_KP_ENTER):
-		var unlocked: bool = _current["unlocked"]
-		if not unlocked:
-			return
-		var floor_number: int = _current["floor"]
-		GameState.progression.pending_floor = floor_number
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		get_tree().change_scene_to_file(Routes.BATTLE)
+
+	if str(_current.get("kind", "stage")) == "portal":
+		_open_travel()
+		return
+
+	var unlocked: bool = _current["unlocked"]
+	if not unlocked:
+		return
+	var floor_number: int = _current["floor"]
+	GameState.progression.pending_floor = floor_number
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().change_scene_to_file(Routes.BATTLE)
+
+
+func _open_travel() -> void:
+	_menu = TravelMenu.open(self, zone_index)
+	_menu.closed.connect(_on_menu_closed)
+
+
+func _on_menu_closed() -> void:
+	_menu = null
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 # --- World ----------------------------------------------------------
@@ -294,6 +328,7 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 	root.add_child(plate)
 
 	_stages.append({
+		"kind": "stage",
 		"name": _stage_caption(stage_index, floor_number, is_boss, cleared, unlocked),
 		"floor": floor_number,
 		"unlocked": unlocked,
@@ -527,6 +562,29 @@ func _prop_crystal(root: Node3D, rng: RandomNumberGenerator) -> void:
 		node.rotation = Vector3(rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU), rng.randf_range(0.0, TAU))
 
 
+# --- Portal ------------------------------------------------------------
+
+# Stands just behind the spawn point, so leaving a zone never means
+# walking the whole path back or quitting to a menu.
+func _build_portal() -> void:
+	portal = Portal.create(_accent())
+	# Beside the spawn point rather than on it, so arriving in a zone does
+	# not immediately pop the travel prompt.
+	portal.position = Vector3(-11.0, 0.0, 10.0)
+	add_child(portal)
+
+	_stages.append({
+		"kind": "portal",
+		"name": "the portal",
+		"floor": 0,
+		"unlocked": true,
+		"pos": portal.position,
+		"radius": portal.interaction_radius(),
+		"pad": null,
+		"base_color": portal.tint,
+	})
+
+
 # --- Actors ------------------------------------------------------------
 
 func _build_player() -> void:
@@ -573,6 +631,10 @@ func _update_proximity() -> void:
 		hud.hide_prompt()
 		return
 
+	if str(closest.get("kind", "stage")) == "portal":
+		hud.show_prompt("Press ENTER to travel")
+		return
+
 	var unlocked: bool = closest["unlocked"]
 	var label: String = closest["name"]
 	if unlocked:
@@ -582,7 +644,14 @@ func _update_proximity() -> void:
 
 
 func _set_pad_active(stage: Dictionary, active: bool) -> void:
+	if str(stage.get("kind", "stage")) == "portal":
+		if portal != null:
+			portal.set_active(active)
+		return
+
 	var pad: MeshInstance3D = stage["pad"]
+	if pad == null:
+		return
 	var mat: StandardMaterial3D = pad.material_override
 	var tint: Color = stage["base_color"]
 	var alpha := 0.20
