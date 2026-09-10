@@ -25,6 +25,31 @@ const MODIFIER_SUFFIXES: Array[String] = ["awakened", "shiny", "golden", "corrup
 const MINOR_WORDS: Array[String] = ["of", "the", "and", "in", "from", "de", "la"]
 
 
+# The opening hand.
+#
+# When the player has supplied artwork, the starters come from it too, so
+# every name in the game traces back to a file on disk. The five lowest
+# rarities are taken, deterministically, so a fresh profile does not open
+# holding a Mythic. With no art at all, the archetype hand in
+# CardGenerator stands in.
+static func starter_templates(count: int) -> Array[CardData]:
+	var from_art := build_from_art()
+	if from_art.size() < count:
+		return CardGenerator.build_starters()
+
+	from_art.sort_custom(func(a, b):
+		var ra := Config.rarity_index(a.rarity)
+		var rb := Config.rarity_index(b.rarity)
+		if ra != rb:
+			return ra < rb
+		return a.card_name.naturalnocasecmp_to(b.card_name) < 0)
+
+	var out: Array[CardData] = []
+	for i in count:
+		out.append(from_art[i])
+	return out
+
+
 static func build_from_art() -> Array[CardData]:
 	var cards: Array[CardData] = []
 	var files := CardArt.list_files()

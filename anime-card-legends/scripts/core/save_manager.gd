@@ -8,7 +8,7 @@ extends RefCounted
 # =========================================================
 
 const SLOT_COUNT := 3
-const VERSION := 3
+const VERSION := 4
 
 # Legacy single-slot file, migrated into slot 1 on first run.
 const LEGACY_PATH := "user://save.json"
@@ -107,7 +107,7 @@ static func dict_to_card(d: Dictionary) -> CardData:
 	return card
 
 
-static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem) -> bool:
+static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem) -> bool:
 	var cards := []
 	for c in collection.owned.values():
 		cards.append(card_to_dict(c))
@@ -127,6 +127,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"boss_pool_unlocked": gacha.boss_pool_unlocked,
 		"items_owned": equipment.owned,
 		"items_equipped": equipment.equipped,
+		"clan": clan.to_dict(),
 		"weather": {
 			"active": weather.active,
 			"ends_at": weather.ends_at,
@@ -144,7 +145,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 	return true
 
 
-static func load_into(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem) -> bool:
+static func load_into(slot: int, wallet: Dictionary, collection: CollectionSystem, progression: ProgressionSystem, weather: WeatherSystem, gacha: GachaSystem, equipment: EquipmentSystem, clan: ClanSystem) -> bool:
 	if not slot_exists(slot):
 		return false
 
@@ -198,6 +199,12 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 	equipment.equipped.clear()
 	for key in parsed.get("items_equipped", {}).keys():
 		equipment.equipped[key] = str(parsed["items_equipped"][key])
+
+	# Saves written before v4 have no clan; the player simply has not
+	# founded one yet.
+	var clan_data = parsed.get("clan", {})
+	if typeof(clan_data) == TYPE_DICTIONARY:
+		clan.from_dict(clan_data)
 
 	var w = parsed.get("weather", {})
 	if typeof(w) == TYPE_DICTIONARY:

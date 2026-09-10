@@ -9,6 +9,7 @@ var talents := {"speed": 0, "luck": 0, "multi": 0}
 var highest_floor := 0
 var pending_floor := 1
 var pending_zone := 0        # transient: which zone the 3D world should build
+var pending_raid := false    # transient: the next battle is the clan raid
 var roll_packs: Dictionary = {}
 
 

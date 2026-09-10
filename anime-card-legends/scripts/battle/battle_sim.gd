@@ -30,6 +30,10 @@ var enemy_index := 0
 var running := false
 var turn := 0
 
+# Total damage the player's side has dealt this battle. Used by the clan
+# raid to credit a contribution; ordinary fights ignore it.
+var player_damage_dealt := 0
+
 var _entered: Dictionary = {}
 
 
@@ -43,6 +47,7 @@ func setup(player_cards: Array, enemy_cards: Array) -> void:
 	player_index = 0
 	enemy_index = 0
 	turn = 0
+	player_damage_dealt = 0
 	_entered.clear()
 	running = true
 
@@ -392,6 +397,8 @@ func _strike(attacker: Combatant, target: Combatant, base_damage: int, kind: Str
 			return true
 
 	var died := target.take_damage(damage)
+	if attacker.side == "player":
+		player_damage_dealt += damage
 	if kind == "basic":
 		attack_performed.emit(attacker, target, damage, kind)
 

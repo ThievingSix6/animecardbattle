@@ -11,6 +11,8 @@ const MENU: Array[Dictionary] = [
 	{"label": "Character",  "icon": "💍", "route": Routes.CHARACTER},
 	{"label": "Talents",    "icon": "⭐", "route": Routes.TALENTS},
 	{"label": "Campaign",   "icon": "🗼", "route": Routes.CAMPAIGN},
+	{"label": "Clan",       "icon": "🏰", "route": Routes.CLAN},
+	{"label": "Settings",   "icon": "⚙️", "route": Routes.SETTINGS},
 ]
 
 

@@ -101,6 +101,20 @@ func stop_music() -> void:
 	_music.stop()
 
 
+# Applies the current music volume to the track already playing, so a
+# settings slider is heard immediately rather than on the next track.
+func apply_music_volume() -> void:
+	if _music == null:
+		return
+	_music.volume_db = linear_to_db(max(0.001, music_volume))
+
+
+# True when a sound with this key is actually present on disk. Lets the
+# settings screen tell the player which audio the build is missing.
+func has_sound(key: String) -> bool:
+	return _stream(key) != null
+
+
 func _loop_music() -> void:
 	if _current_music != "":
 		_music.play()

@@ -39,6 +39,12 @@ signal weather_ended
 @warning_ignore("unused_signal")
 signal weather_tick(seconds_remaining: float)
 
+# Clan
+@warning_ignore("unused_signal")
+signal clan_activity(text: String)
+@warning_ignore("unused_signal")
+signal clan_level_changed(level: int)
+
 # UI
 @warning_ignore("unused_signal")
 signal toast_requested(message: String, kind: String)

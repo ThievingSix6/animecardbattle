@@ -27,20 +27,24 @@ func _build_pool() -> void:
 	for r in Config.RARITY_ORDER:
 		pool[r] = []
 
-	# The starting roster is always pullable, so duplicates of it can be
-	# merged like any other card.
-	for template in CardGenerator.build_starters():
-		_add_to_pool(template)
-
-	# Cards derived from the player's own artwork take priority.
+	# Cards derived from the player's own artwork are the roster. Their
+	# names come from the filenames, so the pool is whatever is in
+	# res://art/cards/.
 	var from_art := CardLibrary.build_from_art()
 	for card in from_art:
 		_add_to_pool(card)
 
-	# Only pad the roster with procedural names if there isn't enough art.
-	var shortfall := Config.GENERATED_CARD_COUNT - from_art.size()
-	if shortfall > 0:
-		_generate(shortfall)
+	if not from_art.is_empty():
+		# Real art is present: do not dilute it with procedural filler,
+		# or the cards the player actually drew would be a minority of
+		# their own pulls.
+		return
+
+	# No artwork supplied yet - fall back to procedural names so the game
+	# is still playable, and keep the archetype starters pullable.
+	for template in CardGenerator.build_starters():
+		_add_to_pool(template)
+	_generate(Config.GENERATED_CARD_COUNT)
 
 
 func _add_to_pool(card: CardData) -> void:

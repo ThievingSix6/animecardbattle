@@ -16,6 +16,7 @@ EventBus="*res://scripts/core/event_bus.gd"
 UITheme="*res://scripts/ui/theme_installer.gd"
 GameState="*res://scripts/game_state.gd"
 Audio="*res://scripts/core/audio.gd"
+Settings="*res://scripts/core/settings.gd"
 
 [display]
 

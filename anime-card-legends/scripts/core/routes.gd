@@ -18,6 +18,8 @@ const TOWER    := "res://scenes/Tower.tscn"
 const CAMPAIGN := "res://scenes/Campaign.tscn"
 const ZONE     := "res://scenes/Zone.tscn"
 const BATTLE   := "res://scenes/Battle.tscn"
+const SETTINGS := "res://scenes/Settings.tscn"
+const CLAN     := "res://scenes/Clan.tscn"
 
 
 static func go(node: Node, route: String) -> void:

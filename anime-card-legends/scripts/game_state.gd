@@ -19,6 +19,7 @@ var gacha: GachaSystem
 var progression: ProgressionSystem
 var weather: WeatherSystem
 var equipment: EquipmentSystem
+var clan: ClanSystem
 
 var wallet := {"gems": Config.START_GEMS, "gold": Config.START_GOLD}
 var active_slot := -1
@@ -40,6 +41,7 @@ func _build_systems() -> void:
 	progression = ProgressionSystem.new()
 	weather = WeatherSystem.new()
 	equipment = EquipmentSystem.new()
+	clan = ClanSystem.new()
 	gacha = GachaSystem.new(
 		collection,
 		func(): return effective_luck(),
@@ -56,7 +58,7 @@ func open_slot(slot: int) -> void:
 	wallet = {"gems": Config.START_GEMS, "gold": Config.START_GOLD}
 	_build_systems()
 
-	if not SaveManager.load_into(slot, wallet, collection, progression, weather, gacha, equipment):
+	if not SaveManager.load_into(slot, wallet, collection, progression, weather, gacha, equipment, clan):
 		_grant_starting_cards()
 		save_now()
 
@@ -89,6 +91,7 @@ func _process(delta: float) -> void:
 	if not has_active_slot():
 		return
 	weather.update()
+	_tick_clan(delta)
 	_tick_auto_roll(delta)
 	_tick_save(delta)
 
@@ -97,18 +100,51 @@ func _process(delta: float) -> void:
 
 func _grant_starting_cards() -> void:
 	var ids: Array[String] = []
-	for template in CardGenerator.build_starters():
+	for template in CardLibrary.starter_templates(CollectionSystem.TEAM_SIZE):
 		var card := collection.add(template)
 		if card and ids.size() < CollectionSystem.TEAM_SIZE:
 			ids.append(card.card_id)
 	collection.set_team(ids)
 
 
+# ---------------- CLAN ----------------
+
+func _tick_clan(delta: float) -> void:
+	if clan == null or not clan.founded:
+		return
+	var before := clan.level
+	var activity := clan.update(delta)
+	if activity != "":
+		EventBus.clan_activity.emit(activity)
+	if clan.level > before:
+		EventBus.clan_level_changed.emit(clan.level)
+		EventBus.toast("Clan reached level %d!" % clan.level, "success")
+		request_save()
+
+
+# Clan XP earned by the player. Routed through here so every source
+# credits the player's own contribution total.
+func credit_clan(amount: int) -> void:
+	if clan == null or not clan.founded or amount <= 0:
+		return
+	var before := clan.level
+	clan.contribute(amount, true)
+	if clan.level > before:
+		EventBus.clan_level_changed.emit(clan.level)
+		EventBus.toast("Clan reached level %d!" % clan.level, "success")
+
+
+func clan_perk(perk_id: String) -> float:
+	if clan == null or not clan.founded:
+		return 0.0
+	return clan.perk_value(perk_id)
+
+
 # ---------------- BACKGROUND ROLLING ----------------
 
 func _tick_auto_roll(delta: float) -> void:
 	_roll_timer += delta
-	var interval := progression.roll_interval()
+	var interval := effective_roll_interval()
 	if _roll_timer < interval:
 		return
 
@@ -122,7 +158,13 @@ func _tick_auto_roll(delta: float) -> void:
 
 
 func effective_luck() -> float:
-	return progression.luck_bonus() * weather.luck_multiplier()
+	return (progression.luck_bonus() + clan_perk("luck")) * weather.luck_multiplier()
+
+
+# The clan's roll-speed perk shortens the gap between auto-rolls.
+func effective_roll_interval() -> float:
+	var interval := progression.roll_interval()
+	return max(Config.ROLL_INTERVAL_MIN, interval * (1.0 - clan_perk("speed")))
 
 
 # ---------------- WALLET ----------------
@@ -175,6 +217,7 @@ func summon(count: int, origin: String = "") -> Array[CardData]:
 		return []
 
 	var pulled := gacha.pull_many(count, origin)
+	credit_clan(pulled.size() * 5)
 	request_save()
 	return pulled
 
@@ -250,8 +293,16 @@ func use_roll_pack(pack_id: String) -> Dictionary:
 
 func clear_floor(floor_number: int) -> Dictionary:
 	var rewards := progression.clear_floor(floor_number)
+
+	# Clan perks are applied to the payout, so the numbers the result
+	# screen shows are the numbers actually banked.
+	rewards["gems"] = int(round(float(rewards["gems"]) * (1.0 + clan_perk("gems"))))
+	rewards["gold"] = int(round(float(rewards["gold"]) * (1.0 + clan_perk("gold"))))
+
 	add_gems(rewards["gems"])
 	add_gold(rewards["gold"])
+	credit_clan(30 + floor_number * 6)
+
 	if progression.is_boss_floor(floor_number):
 		gacha.unlock_boss_pool()
 	save_now()
@@ -278,7 +329,7 @@ func _tick_save(delta: float) -> void:
 func save_now() -> void:
 	if not has_active_slot():
 		return
-	SaveManager.save(active_slot, wallet, collection, progression, weather, gacha, equipment)
+	SaveManager.save(active_slot, wallet, collection, progression, weather, gacha, equipment, clan)
 
 
 func _notification(what: int) -> void:

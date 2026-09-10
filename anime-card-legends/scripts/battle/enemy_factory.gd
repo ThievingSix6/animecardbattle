@@ -29,6 +29,36 @@ static func build_floor(floor_number: int, progression: ProgressionSystem) -> Ar
 	return out
 
 
+# The clan raid boss: one enormous target, scaled by clan level. Its HP
+# here is only what the player fights through in a single sortie - the
+# shared pool the whole clan chips away at lives on ClanSystem.
+static func build_raid(clan_level: int, boss_name: String) -> Array[CardData]:
+	var scale := 1.0 + float(clan_level) * 0.45
+
+	var boss := CardData.new()
+	boss.card_id = "raid_boss"
+	boss.card_name = boss_name
+	boss.role = "Tank"
+	boss.rarity = "Mythic"
+	boss.modifier = "Normal"
+	boss.element = "Dark"
+	boss.origin_tag = "raid"
+	boss.basic_ability = "Sunder"
+	boss.ultimate_ability = "World Ender"
+	boss.basic_target_mode = "aoe"
+	boss.ultimate_target_mode = "aoe"
+	boss.skill_id = "ironhide"
+
+	var shape: Dictionary = Config.ROLE_STATS["Tank"]
+	boss.attack  = max(5,  int(BASE["attack"]  * scale * 1.8 * shape["attack"]))
+	boss.defense = max(3,  int(BASE["defense"] * scale * 1.8 * shape["defense"]))
+	boss.health  = max(60, int(BASE["health"]  * scale * 9.0 * shape["health"]))
+	boss.speed   = max(4,  int(BASE["speed"]   * scale * shape["speed"]))
+
+	var out: Array[CardData] = [boss]
+	return out
+
+
 static func _build(tier: Dictionary, floor_number: int, slot: int, scale: float, is_boss: bool) -> CardData:
 	var names: Array = tier["names"]
 	var roles: Array = tier["roles"]
