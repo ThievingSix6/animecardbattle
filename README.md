@@ -1,8 +1,8 @@
 # Anime Card Legends
 
-A gacha auto-battler: summon a roster, build a five-card team, and send it up a
-50-floor tower. Combat resolves automatically — the player's decisions are which
-cards to pull, merge, and field.
+A gacha auto-battler: summon a roster, build a five-card team, and fight it
+through six zones. Combat resolves automatically — the player's decisions are
+which cards to pull, merge, and field, and which passives they bring.
 
 This repository holds two things:
 
@@ -50,16 +50,20 @@ web/dist/index.html
 
 It runs directly from `file://` with no server and no tooling.
 
-### Headless combat test
+### Headless tests
 
 ```bash
 cd web
-npm run simulate
+npm run simulate   # balance: win rate and pacing per zone
+npm run skills     # exercises all 100 passives
 ```
 
-Runs the real battle engine against the real enemy factory across ten tower
-floors and reports win rate, round count, and average damage. Use it to catch
-balance regressions without opening a browser.
+`simulate` runs the real battle engine against the real enemy factory across a
+stage and a boss from every zone, and fails on fights that stall or end in one
+hit. `skills` wraps every passive so its hooks report when they run, fights it
+against opponents that burn, stun and block, and fails if any hook never fires
+or any skill throws — card text is generated from these mechanics, so a dead
+skill is a card lying to the player.
 
 ---
 
@@ -67,8 +71,8 @@ balance regressions without opening a browser.
 
 | Input               | Action                                           |
 | ------------------- | ------------------------------------------------ |
-| Mouse               | Click anything — nav tabs, cards, floors, buttons |
-| `1` – `6`           | Jump to Lobby / Tower / Team / Collection / Summon / Talents |
+| Mouse               | Click anything — nav tabs, cards, stages, buttons |
+| `1` – `6`           | Jump to Lobby / Campaign / Team / Collection / Summon / Talents |
 | `Enter` / `Space`   | Activate the focused card                        |
 | `Esc`               | Close a dialog, or return to the Lobby           |
 | `Tab`               | Move focus between cards and buttons             |
@@ -82,23 +86,38 @@ The full gameplay loop, not a mockup:
 - **Lobby** — live stats and a summon feed that fills as cards auto-roll in
 - **Summon** — single and ten-pulls against origin banners, priced in gems;
   roll packs earned from boss floors resolve millions of rolls statistically
-- **Collection** — sortable grid, per-card detail with real pull odds, sell,
-  and merge-to-ascend at 100 copies
+- **Collection** — sortable grid, per-card detail with real pull odds, the
+  card's passive and its family, sell, and merge-to-ascend at 100 copies
 - **Team builder** — pick up to five cards; lane order decides who fights first
-- **Tower** — 50 floors, every fifth a boss, floors unlock as you clear them
-- **Battle** — automatic lane combat: front cards trade blows, basic abilities
-  fire on a cadence, ultimates at full energy, passives (guardian intercepts,
-  lifesteal, energy surge) trigger, and a fallen card is replaced by the next
+- **Campaign** — six zones of seven stages, each ending in a boss; clear a
+  zone's boss to open the next
+- **Battle** — the two active duelists centre stage with the rest of each team
+  on a bench. Front cards trade blows, basic abilities fire on a cadence,
+  ultimates at full energy, passives trigger, summons join the back of the
+  lane, and a fallen card is replaced permanently by the next
+- **Passive skills** — 100 across nine families (defense, offense, element,
+  death, summon, support, control, risk, legendary). Every card carries one
 - **Victory / defeat** — gem and gold rewards, roll packs on boss floors, and
-  a next-floor / retry flow
+  a next-stage / retry flow
 - **Talents** — spend gold to speed up rolls, improve luck, and roll multiple
   cards per tick
 - **Weather events** — timed global events that boost one element's pull rate
 
 Balance is ported verbatim from the Godot project's `Config`, so the two play
-the same. The starting team clears floors 1–3 reliably, fights the floor-5 boss
-at roughly 80%, and cannot beat floor 10 — you have to summon and merge to
-progress.
+the same. The starting team clears the opening stages reliably, hits a wall at
+the first zone boss, and cannot progress past the second zone without summoning
+and merging.
+
+### Skills are turn-based
+
+The skill designs are written for a real-time game — "for 4 seconds", "every 10
+seconds", movement speed, knockback — but combat resolves in discrete turns.
+Rather than rewrite the engine (every balance number assumes turns), each
+concept is translated, and `src/game/combatant.ts` documents the mapping in one
+place: two seconds is one turn, attack speed becomes ultimate charge rate,
+movement speed becomes the speed stat that decides turn order. Displacement has
+no turn-based analogue, so those skills grant stun resistance instead of
+claiming an effect the simulation does not run.
 
 ---
 
@@ -109,17 +128,20 @@ progress.
 ```
 project.godot          Godot 4.5, main scene = scenes/SaveSlots.tscn
                        autoloads: EventBus, UITheme, GameState, Audio
-scenes/                10 scenes (SaveSlots, Main, Lobby, Battle, Tower, ...)
+scenes/                12 scenes (SaveSlots, Main, Lobby, Campaign, Zone,
+                       Battle, ...)
 scripts/
-  core/                config.gd (all tuning), event_bus, save_manager,
+  core/                config.gd (all tuning), campaign.gd (the six zones),
+                       skills.gd (the 100 passives), event_bus, save_manager,
                        routes, mutations, audio, fmt
   models/card_data.gd  the CardData resource
   systems/             card_generator, card_library, gacha, collection,
                        progression, equipment, weather
-  battle/              battle_sim (rules), combatant, enemy_factory, battle_card
+  battle/              battle_sim (rules), combatant, skill_effects (what
+                       each passive does), enemy_factory, battle_card
   screens/             one script per scene
   ui/                  design.gd (tokens), card_view, card_art, widgets, theme
-  lobby3d/             3D hub world
+  lobby3d/             3D hub world and the six campaign zone worlds
 art/                   cards/ (drop-in artwork), icons/, ui/, fonts/
 tools/check_gdscript.py  static checker — run before opening Godot
 ```
@@ -140,7 +162,10 @@ src/
   game/                pure logic, no DOM — ported 1:1 from GDScript
     config.ts          <- scripts/core/config.gd
     design.ts          <- scripts/ui/design.gd
-    battleSim.ts       <- scripts/battle/battle_sim.gd + combatant.gd
+    battleSim.ts       <- scripts/battle/battle_sim.gd
+    combatant.ts       <- scripts/battle/combatant.gd
+    skills.ts          <- scripts/core/skills.gd + battle/skill_effects.gd
+    campaign.ts        <- scripts/core/campaign.gd
     enemyFactory.ts    <- scripts/battle/enemy_factory.gd
     cardGenerator.ts   <- scripts/systems/card_generator.gd
     gacha.ts           <- scripts/systems/gacha.gd
@@ -150,7 +175,8 @@ src/
     weather.ts         <- scripts/systems/weather.gd
     gameState.ts       <- scripts/game_state.gd
   ui/                  screens, card rendering, design tokens as CSS
-scripts/simulate.mjs   headless combat test
+scripts/simulate.mjs   headless balance test
+scripts/skill-check.mjs  headless skill coverage test
 ```
 
 ---
@@ -176,11 +202,15 @@ with role and element sigils instead.
   in memory, so a refresh restarts the run.
 - **No equipment.** `scripts/systems/equipment.gd` (crafting and stat bonuses)
   is not ported.
-- **No 3D lobby.** The Godot hub world in `scripts/lobby3d/` is replaced by a
-  2D lobby screen.
+- **No 3D zones in the browser.** The Godot build has six walkable 3D zone
+  worlds (`scripts/lobby3d/zone_world.gd`, generated from primitives with no
+  imported art); the prototype uses a 2D stage select.
 - **No audio.** The Godot project has an audio bus; the prototype is silent.
 - **The prototype ships no card artwork,** so cards use generated frames rather
   than images.
 - **The Godot project has not been run in this environment** — Godot is not
   installed here. It is validated statically with `tools/check_gdscript.py`,
-  which passes, but the editor has not opened the scenes.
+  which passes, and every `res://` path resolves, but the editor has not opened
+  the scenes and the 3D zones have not been walked. The skill library was
+  generated from the prototype's tested copy and cross-checks identical, but no
+  battle has been fought in the engine itself.
