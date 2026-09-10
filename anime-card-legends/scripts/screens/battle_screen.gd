@@ -30,6 +30,10 @@ func back_route() -> String:
 		return Routes.CLAN
 	return Routes.ZONE
 
+# The board is a fixed layout that fills the window - never scrolled.
+func scrolls_content() -> bool: return false
+
+
 func shows_weather() -> bool:
 	return false
 

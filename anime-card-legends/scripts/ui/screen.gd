@@ -36,6 +36,12 @@ func shows_weather() -> bool:
 func requires_slot() -> bool:
 	return true
 
+# Screens are taller than the window more often than not, so the content
+# region scrolls by default. Screens that own their own scrolling, or
+# that need a fixed full-rect layout (the battle board), opt out.
+func scrolls_content() -> bool:
+	return true
+
 func build_content() -> void:
 	pass
 
@@ -108,8 +114,21 @@ func _build_chrome() -> void:
 		root.add_child(_weather_banner)
 
 	content = UI.vbox(Design.S4)
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(content)
+	if scrolls_content():
+		# The vbox grows to whatever its children need; the scroll
+		# container is what claims the leftover height.
+		var page := ScrollContainer.new()
+		page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		page.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		page.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		page.follow_focus = true
+		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		page.add_child(content)
+		root.add_child(page)
+	else:
+		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		root.add_child(content)
 
 	# Toasts float above everything.
 	_toast_layer = UI.vbox(Design.S2)
@@ -178,6 +197,13 @@ func _exit_tree() -> void:
 func unbind(sig: Signal, handler: Callable) -> void:
 	if sig.is_connected(handler):
 		sig.disconnect(handler)
+
+
+# Screens that rebuild themselves in place call build_content() more than
+# once, and a second connect() of the same handler is an engine error.
+func bind(sig: Signal, handler: Callable) -> void:
+	if not sig.is_connected(handler):
+		sig.connect(handler)
 
 
 # --- Currency -----------------------------------------------------

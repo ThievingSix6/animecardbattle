@@ -26,6 +26,26 @@ const RARITY_WEIGHTS := {
 # they are reserved for cards explicitly marked in their art filename.
 const ART_ONLY_RARITIES: Array[String] = ["Awakened"]
 
+# How the ROSTER is spread across rarities - a completely different
+# question from how often each rarity is PULLED.
+#
+# Weighting the roster by RARITY_WEIGHTS above would make roughly four in
+# five cards Common and leave Epic and up empty, so with a few dozen
+# images there would be nothing at the top of the collection to chase and
+# the pity system would have nothing to hand out. This curve is close to
+# flat instead: rarity stays rare at the summon screen because of the
+# pull weights, not because those cards do not exist.
+const ROSTER_RARITY_WEIGHTS := {
+	"Common":    26.0,
+	"Uncommon":  22.0,
+	"Rare":      18.0,
+	"Epic":      14.0,
+	"Legendary": 10.0,
+	"Mythic":     7.0,
+	"Secret":     3.0,
+	"Awakened":   0.0,
+}
+
 # ---------------- STAT SCALING ----------------
 # Common is the baseline; each tier multiplies it. Speed grows far more
 # slowly than power so turn order stays meaningful at high rarity.
@@ -116,11 +136,9 @@ const ROLL_PACKS := {
 }
 
 # ---------------- BANNERS ----------------
-const ORIGINS: Array[String] = ["", "demon", "angel", "lord", "anime", "primordial"]
-const ORIGIN_LABELS := {
-	"": "All Origins", "demon": "Demon", "angel": "Angel",
-	"lord": "Lords", "anime": "Anime", "primordial": "Primordial",
-}
+# Banners live in scripts/core/banners.gd - they carry their own art,
+# rate-up, pity counters and themed roster, which a flat label list
+# here could not express.
 
 # ---------------- STARTING ROSTER ----------------
 # Declared as plain data rather than resource files: stats are derived

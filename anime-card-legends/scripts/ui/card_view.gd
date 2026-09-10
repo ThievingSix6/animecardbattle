@@ -47,13 +47,14 @@ func _build() -> void:
 	flat = true
 	focus_mode = Control.FOCUS_NONE
 	text = ""
-	clip_contents = true
+	# Deliberately NOT clipped: the rarity glow is a shadow drawn outside
+	# the card's rect, and clipping here is what used to erase it. The
+	# artwork gets its own clipped layer instead.
+	clip_contents = false
 
-	var accent := Design.rarity_color(card.rarity)
-	var border: int = Design.RARITY_BORDER.get(card.rarity, 2)
-	var aura: int = Design.RARITY_AURA.get(card.rarity, 0)
+	var aura := Design.rarity_aura(card.rarity)
 
-	_style = ThemeBuilder.aura_style(Design.SURFACE, accent, border, aura)
+	_style = ThemeBuilder.rarity_aura_style(card.rarity)
 	_style.set_content_margin_all(0)
 	var states: Array[String] = ["normal", "hover", "pressed", "focus", "disabled"]
 	for state in states:
@@ -76,6 +77,14 @@ func _build() -> void:
 # --- Art (fills the entire card, everything else sits on top) ------
 
 func _build_art() -> void:
+	# The clip lives here rather than on the card so the rarity glow,
+	# which is drawn outside the card's bounds, survives.
+	var frame := Control.new()
+	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
+	frame.clip_contents = true
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(frame)
+
 	var art := TextureRect.new()
 	art.texture = CardArt.for_card(card)
 	art.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -83,7 +92,7 @@ func _build_art() -> void:
 	art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	art.modulate = CardArt.tint_for(card)
 	art.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(art)
+	frame.add_child(art)
 
 
 func _build_top_scrim() -> void:
@@ -252,6 +261,15 @@ func _build_stat_bar() -> void:
 
 	row.add_child(_stat_chunk("sword", "DMG", Fmt.compact(card.attack), size, Design.ACCENT))
 	row.add_child(UI.spacer())
+
+	# A levelled card should be obvious in a grid of otherwise identical
+	# copies, so the level only shows once it has been invested in.
+	if card.level > 1:
+		var level_label := UI.label("Lv%d" % card.level, size, Design.INFO)
+		level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(level_label)
+		row.add_child(UI.spacer())
+
 	row.add_child(_stat_chunk("heart", "HP", Fmt.compact(card.health), size, Design.SUCCESS))
 
 
@@ -289,13 +307,26 @@ func _build_selection_overlay() -> void:
 
 # --- Animation ------------------------------------------------------
 
+# Higher rarities breathe wider and slower, so the tier reads even in
+# peripheral vision. "Reduce flashing" pins the glow at a steady size
+# rather than removing it - the rarity is still legible.
 func _animate_aura(base: int) -> void:
+	if Settings.reduce_flashing:
+		return
+
+	var swing := Design.rarity_pulse(card.rarity)
+	if swing <= 0:
+		return
+	var beat := Design.rarity_pulse_speed(card.rarity)
+
 	var tween := create_tween().set_loops()
-	tween.tween_property(_style, "shadow_size", base + 5, 1.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tween.tween_property(_style, "shadow_size", base, 1.2).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(_style, "shadow_size", base + swing, beat).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_property(_style, "shadow_size", base, beat).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 func _animate_rainbow() -> void:
+	if Settings.reduce_flashing:
+		return
 	var tween := create_tween().set_loops()
 	var steps := 6
 	for i in range(steps + 1):

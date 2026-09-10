@@ -198,6 +198,8 @@ func _asset_report() -> Control:
 
 	body.add_child(_card_art_row())
 	body.add_child(UI.separator())
+	body.add_child(_banner_row())
+	body.add_child(UI.separator())
 	body.add_child(_icon_row())
 	body.add_child(UI.separator())
 	body.add_child(_audio_row())
@@ -231,6 +233,34 @@ func _card_art_row() -> Control:
 	if files.size() > shown:
 		box.add_child(UI.caption("...and %d more" % (files.size() - shown)))
 
+	return box
+
+
+func _banner_row() -> Control:
+	var missing: Array[String] = []
+	for id in Banners.ids():
+		if not Banners.has_art(id):
+			missing.append(id)
+
+	var box := UI.vbox(Design.S1)
+	var total := Banners.ids().size()
+	var found := total - missing.size()
+
+	var colour := Design.DANGER
+	if missing.is_empty():
+		colour = Design.SUCCESS
+	elif found > 0:
+		colour = Design.ACCENT
+	box.add_child(UI.label("Banner art: %d of %d matched" % [found, total],
+		Design.FS_BODY, colour))
+
+	if missing.is_empty():
+		return box
+
+	box.add_child(UI.caption(
+		"Banners load by exact filename from res://art/banners/. These are "
+		+ "drawing a generated gradient because no file of that name was found:"))
+	box.add_child(UI.caption("  " + ", ".join(missing) + "  (.png, .jpg or .webp)"))
 	return box
 
 

@@ -31,7 +31,7 @@ func _build() -> void:
 
 	var accent := Design.rarity_color(card.rarity)
 	var border_width: int = Design.RARITY_BORDER.get(card.rarity, 2)
-	_style = ThemeBuilder.aura_style(Design.SURFACE, accent, border_width, 0, Design.R_MD)
+	_style = ThemeBuilder.aura_style(Design.SURFACE, accent, border_width, 0, 0.0, Design.R_MD)
 	_style.set_content_margin_all(Design.S2)
 	add_theme_stylebox_override("panel", _style)
 

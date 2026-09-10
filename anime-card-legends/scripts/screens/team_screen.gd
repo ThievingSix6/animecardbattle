@@ -7,6 +7,10 @@ var _team: Array[String] = []
 
 
 func screen_title() -> String: return "Team"
+# This screen scrolls its own list region, so the base page scroll
+# would just nest one scroll inside another.
+func scrolls_content() -> bool: return false
+
 
 
 func build_content() -> void:
@@ -30,7 +34,7 @@ func build_content() -> void:
 	content.add_child(UI.section("Your cards"))
 
 	var scroll := UI.scroll()
-	_grid = UI.grid(6, Design.S3)
+	_grid = UI.grid(6, Design.S5)
 	scroll.add_child(_grid)
 	content.add_child(scroll)
 

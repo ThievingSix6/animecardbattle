@@ -17,6 +17,9 @@ signal team_changed
 @warning_ignore("unused_signal")
 signal card_acquired(card: CardData, is_new: bool)
 
+# A card gained a level from gold spent on it.
+signal card_levelled(card: CardData)
+
 # Rolling
 @warning_ignore("unused_signal")
 signal auto_rolled(cards: Array)

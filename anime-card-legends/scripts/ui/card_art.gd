@@ -73,7 +73,13 @@ static func for_card(card: CardData) -> Texture2D:
 
 
 static func _resolve(card: CardData) -> Texture2D:
-	# 1. Explicit filename match wins.
+	# 1. The image the card was built from, recorded at build time. This
+	# is what keeps "grave_knight_awakened" showing its own artwork
+	# instead of borrowing the base card's.
+	if card.art_path != "" and ResourceLoader.exists(card.art_path):
+		return load(card.art_path)
+
+	# 2. Explicit filename match, for cards that were not built from art.
 	var candidates: Array[String] = [slug(card.card_name), card.card_id]
 	for candidate in candidates:
 		for ext in EXTENSIONS:
@@ -81,12 +87,12 @@ static func _resolve(card: CardData) -> Texture2D:
 			if ResourceLoader.exists(path):
 				return load(path)
 
-	# 2. Otherwise assign deterministically from the pool.
+	# 3. Otherwise assign deterministically from the pool.
 	if not _files.is_empty():
 		var index: int = abs(hash(card.card_id)) % _files.size()
 		return load(_files[index])
 
-	# 3. No art supplied: the card frame renders on its own.
+	# 4. No art supplied: the card frame renders on its own.
 	return null
 
 

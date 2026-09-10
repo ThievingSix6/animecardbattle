@@ -83,16 +83,104 @@ static func card_from_path(path: String) -> CardData:
 	card.modifier = parsed["modifier"]
 	card.origin_tag = "art"
 
-	card.role = Config.ROLES[rng.randi() % Config.ROLES.size()]
-	card.element = Config.ELEMENTS[rng.randi() % Config.ELEMENTS.size()]
+	# The name is read first: "Ember Witch" should be Fire, "Grave Knight"
+	# should be Dark. Only a name with nothing recognisable in it falls
+	# back to the deterministic roll.
+	card.role = role_for_name(display_name, rng)
+	card.element = element_for_name(display_name, rng)
 	card.faction = Config.FACTIONS[rng.randi() % Config.FACTIONS.size()]
 	card.description = _flavour(display_name, card.rarity, rng)
 	card.sell_value = Config.sell_value_for_rarity(card.rarity)
 
+	# Pin the exact image. Without this, "grave_knight_awakened" resolves
+	# by name back to grave_knight's picture.
+	card.art_path = path
+	card.banner_id = Banners.banner_for(card.element, card.role)
+
 	_apply_stats(card, rng)
 	_apply_abilities(card, rng)
+	Leveling.apply(card)
 
 	return card
+
+
+# --- Reading the name --------------------------------------------------
+#
+# Keyword tables, longest match first. These are matched against whole
+# words in the card name, so "Frostbound Warlord" is Water because of
+# "frostbound", not because "war" appears somewhere inside it.
+
+const ELEMENT_WORDS := {
+	"Fire":  ["ember", "emberfall", "flame", "crimson", "phoenix", "blaze", "cinder",
+		"ash", "ashen", "pyre", "inferno", "scorch", "solar", "sun", "sunforged",
+		"magma", "forge", "wildfire"],
+	"Water": ["frost", "frostbound", "tide", "abyss", "abyssal", "glacier", "glacial",
+		"ice", "rime", "mist", "wave", "coral", "deep", "drown", "torrent", "glass"],
+	"Earth": ["stone", "titan", "iron", "ironroot", "root", "forest", "mushroom", "grove",
+		"mountain", "granite", "bramble", "thorn", "venom", "verdant", "moss", "oak",
+		"wild", "wildfang", "beast", "fang", "claw", "savage", "boar", "tusk"],
+	"Wind":  ["storm", "stormcaller", "gale", "tempest", "sky", "wind", "cyclone",
+		"feather", "swift", "cloud", "thunder", "lightning"],
+	"Light": ["moon", "moonblade", "lumen", "radiant", "dawn", "saint", "priestess",
+		"halo", "seraph", "angel", "star", "prism", "crystal", "silver", "divine",
+		"sacred", "paladin", "time", "dream", "dreamweaver", "chrono", "aether", "arcane"],
+	"Dark":  ["shadow", "grave", "void", "reaper", "wraith", "phantom", "nightmare",
+		"night", "dusk", "crow", "raven", "blood", "bone", "curse", "hex",
+		"dread", "gloom", "obsidian", "duskmire"],
+}
+
+const ROLE_WORDS := {
+	"Tank":     ["knight", "titan", "warden", "guardian", "bulwark", "sentinel",
+		"paladin", "warlord", "bastion", "colossus", "shield", "juggernaut"],
+	"DPS":      ["duelist", "berserker", "slayer", "blade", "swordsman", "gunner",
+		"champion", "warrior", "brawler", "striker", "lancer", "fang"],
+	"Assassin": ["assassin", "reaper", "rogue", "stalker", "hunter", "shade",
+		"ronin", "shinobi", "ninja", "thief", "phantom", "blademaster"],
+	"Healer":   ["healer", "priestess", "priest", "saint", "cleric", "medic",
+		"oracle", "shepherd", "mender", "seraph"],
+	"Support":  ["witch", "sage", "mage", "magus", "warlock", "weaver", "seer",
+		"summoner", "scholar", "enchanter", "dreamweaver", "caller",
+		"stormcaller", "conjurer", "bard"],
+}
+
+
+static func _words_of(display_name: String) -> Array[String]:
+	var out: Array[String] = []
+	for part in display_name.to_lower().split(" ", false):
+		out.append(str(part))
+	return out
+
+
+# Longest keyword wins, so "moonblade" beats a bare "blade".
+static func _match_table(display_name: String, table: Dictionary) -> String:
+	var words := _words_of(display_name)
+	var best := ""
+	var best_length := 0
+
+	for key in table.keys():
+		var keywords: Array = table[key]
+		for keyword in keywords:
+			var needle := str(keyword)
+			for word in words:
+				if word == needle or word.contains(needle):
+					if needle.length() > best_length:
+						best_length = needle.length()
+						best = str(key)
+	return best
+
+
+static func element_for_name(display_name: String, rng: RandomNumberGenerator) -> String:
+	var found := _match_table(display_name, ELEMENT_WORDS)
+	if found != "":
+		return found
+	return Config.ELEMENTS[rng.randi() % Config.ELEMENTS.size()]
+
+
+static func role_for_name(display_name: String, rng: RandomNumberGenerator) -> String:
+	var found := _match_table(display_name, ROLE_WORDS)
+	if found != "":
+		return found
+	return Config.ROLES[rng.randi() % Config.ROLES.size()]
 
 
 # --- Filename parsing ----------------------------------------------
@@ -148,8 +236,12 @@ static func _title_case(words: Array[String]) -> String:
 	return " ".join(out)
 
 
-# Deterministic weighted rarity from the filename, so an unmarked image
-# still lands somewhere sensible on the curve and never changes.
+# Deterministic rarity from the filename, so an unmarked image always
+# lands on the same tier.
+#
+# This draws on the ROSTER curve, not the pull curve. Using the pull
+# weights here would make around four in five images Common and leave
+# nothing above Epic in the collection at all.
 static func _roll_rarity_for(stem: String) -> String:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("rarity:" + stem)
@@ -158,14 +250,14 @@ static func _roll_rarity_for(stem: String) -> String:
 	for r in Config.RARITY_ORDER:
 		if r in Config.ART_ONLY_RARITIES:
 			continue
-		total += Config.RARITY_WEIGHTS[r]
+		total += float(Config.ROSTER_RARITY_WEIGHTS[r])
 
 	var roll := rng.randf() * total
 	var cumulative := 0.0
 	for r in Config.RARITY_ORDER:
 		if r in Config.ART_ONLY_RARITIES:
 			continue
-		cumulative += Config.RARITY_WEIGHTS[r]
+		cumulative += float(Config.ROSTER_RARITY_WEIGHTS[r])
 		if roll <= cumulative:
 			return r
 	return "Common"

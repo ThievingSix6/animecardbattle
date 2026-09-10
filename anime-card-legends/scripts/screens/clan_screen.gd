@@ -34,9 +34,11 @@ func build_content() -> void:
 	_build_roster(clan)
 	_build_feed()
 
-	EventBus.clan_activity.connect(_on_activity)
-	EventBus.clan_level_changed.connect(_on_level_changed)
-	EventBus.chat_message.connect(_on_chat_message)
+	# build_content() runs again on every rebuild, so these have to be
+	# connect-once.
+	bind(EventBus.clan_activity, _on_activity)
+	bind(EventBus.clan_level_changed, _on_level_changed)
+	bind(EventBus.chat_message, _on_chat_message)
 
 
 func _exit_tree() -> void:
@@ -152,9 +154,9 @@ func _build_raid(clan: ClanSystem) -> void:
 
 func _refresh_raid() -> void:
 	var clan: ClanSystem = GameState.clan
-	if _raid_bar:
+	if is_instance_valid(_raid_bar):
 		_raid_bar.value = clan.raid_progress()
-	if _raid_label:
+	if is_instance_valid(_raid_label):
 		_raid_label.text = "%s   %s / %s HP" % [
 			clan.raid_boss, Fmt.compact(clan.raid_hp), Fmt.compact(clan.raid_max_hp)]
 
@@ -207,15 +209,15 @@ func _build_perks(clan: ClanSystem) -> void:
 func _build_roster(clan: ClanSystem) -> void:
 	content.add_child(UI.section("Roster — this week's contribution"))
 
-	var scroll := UI.scroll()
+	# Rendered straight into the page. The screen itself scrolls, so a
+	# scroll container here would swallow the wheel and strand everything
+	# below it.
 	var list := UI.vbox(Design.S1)
-	scroll.add_child(list)
-
 	var rows := clan.leaderboard(_player_power())
 	for i in rows.size():
 		list.add_child(_member_row(i + 1, rows[i]))
 
-	content.add_child(scroll)
+	content.add_child(list)
 
 
 func _member_row(position: int, member: Dictionary) -> Control:
@@ -273,9 +275,16 @@ func _build_chat() -> void:
 	var body := UI.vbox(Design.S3)
 	panel.add_child(body)
 
-	_chat_scroll = UI.scroll()
-	_chat_scroll.custom_minimum_size = Vector2(0, 200)
+	# The one nested scroll on this screen, and a deliberate one: the log
+	# is a fixed-height window onto a long history. Everything else on the
+	# page rides the screen's own scroll.
+	_chat_scroll = ScrollContainer.new()
+	_chat_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_chat_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_chat_scroll.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	_chat_scroll.custom_minimum_size = Vector2(0, 220)
 	_chat_log = UI.vbox(Design.S1)
+	_chat_log.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_chat_scroll.add_child(_chat_log)
 	body.add_child(_chat_scroll)
 
@@ -320,7 +329,9 @@ func _on_chat_message(author: String, text: String, from_player: bool) -> void:
 
 
 func _append_message(author: String, text: String, from_player: bool) -> void:
-	if _chat_log == null:
+	# A rebuild frees the old log, and a chat line can land in the gap
+	# before the new one exists.
+	if not is_instance_valid(_chat_log):
 		return
 
 	# Clear the placeholder once a real line arrives.
@@ -353,9 +364,11 @@ func _append_message(author: String, text: String, from_player: bool) -> void:
 
 
 func _scroll_chat_to_end() -> void:
-	if _chat_scroll == null:
+	if not is_instance_valid(_chat_scroll):
 		return
 	await get_tree().process_frame
+	if not is_instance_valid(_chat_scroll):
+		return
 	var bar := _chat_scroll.get_v_scroll_bar()
 	if bar:
 		_chat_scroll.scroll_vertical = int(bar.max_value)
@@ -375,7 +388,7 @@ func _build_feed() -> void:
 
 
 func _on_activity(text: String) -> void:
-	if _feed == null:
+	if not is_instance_valid(_feed):
 		return
 
 	# Drop the placeholder the first time something real arrives.
