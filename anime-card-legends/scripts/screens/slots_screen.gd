@@ -139,6 +139,7 @@ func _ago(unix_time: int) -> String:
 # anywhere else would just mean walking to it.
 func _open(slot: int) -> void:
 	GameState.open_slot(slot)
+	Routes.hub_return = Routes.LOBBY
 	Routes.go(self, Routes.LOBBY)
 
 

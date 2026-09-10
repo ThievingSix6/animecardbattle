@@ -74,13 +74,14 @@ func _switch_profile() -> void:
 	Routes.go(self, Routes.SLOTS)
 
 
+# Opened from here, so back from a destination means back to here.
 func _navigate(route: String) -> void:
 	if route == "battle":
 		var next_floor: int = GameState.progression.highest_floor + 1
 		GameState.progression.queue_floor(mini(next_floor, Config.MAX_FLOOR))
-		Routes.go(self, Routes.BATTLE)
-	else:
-		Routes.go(self, route)
+		Routes.enter(self, Routes.BATTLE, Routes.MAIN)
+		return
+	Routes.enter(self, route, Routes.MAIN)
 
 
 func _refresh_ticker() -> void:

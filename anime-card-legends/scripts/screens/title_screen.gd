@@ -291,6 +291,8 @@ func _on_new_game() -> void:
 # arriving anywhere else would make the player walk to it.
 func _enter(slot: int) -> void:
 	GameState.open_slot(slot)
+	# The city is the hub from here on.
+	Routes.hub_return = Routes.LOBBY
 	Routes.go(self, Routes.LOBBY)
 
 

@@ -255,33 +255,33 @@ func _build_stat_bar() -> void:
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(row)
 
-	var size := Design.FS_SMALL
+	var font_size := Design.FS_SMALL
 	if _compact:
-		size = Design.FS_MICRO
+		font_size = Design.FS_MICRO
 
-	row.add_child(_stat_chunk("sword", "DMG", Fmt.compact(card.attack), size, Design.ACCENT))
+	row.add_child(_stat_chunk("sword", "DMG", Fmt.compact(card.attack), font_size, Design.ACCENT))
 	row.add_child(UI.spacer())
 
 	# A levelled card should be obvious in a grid of otherwise identical
 	# copies, so the level only shows once it has been invested in.
 	if card.level > 1:
-		var level_label := UI.label("Lv%d" % card.level, size, Design.INFO)
+		var level_label := UI.label("Lv%d" % card.level, font_size, Design.INFO)
 		level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_child(level_label)
 		row.add_child(UI.spacer())
 
-	row.add_child(_stat_chunk("heart", "HP", Fmt.compact(card.health), size, Design.SUCCESS))
+	row.add_child(_stat_chunk("heart", "HP", Fmt.compact(card.health), font_size, Design.SUCCESS))
 
 
 # Uses a real icon when one exists in art/icons/, otherwise just the label.
-func _stat_chunk(icon_key: String, caption: String, value: String, size: int, tint: Color) -> HBoxContainer:
+func _stat_chunk(icon_key: String, caption: String, value: String, font_size: int, tint: Color) -> HBoxContainer:
 	var chunk := UI.hbox(3)
 	chunk.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	if Icons.has(icon_key):
-		chunk.add_child(Icons.node(icon_key, size + 2, tint))
+		chunk.add_child(Icons.node(icon_key, font_size + 2, tint))
 
-	var label := UI.label(caption + " " + value, size, tint)
+	var label := UI.label(caption + " " + value, font_size, tint)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	chunk.add_child(label)
 	return chunk

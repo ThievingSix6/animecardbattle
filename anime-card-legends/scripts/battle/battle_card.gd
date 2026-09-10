@@ -26,8 +26,11 @@ static func create(source: Combatant) -> BattleCard:
 
 func _build() -> void:
 	var card := combatant.data
-	custom_minimum_size = Vector2(150, 218)
-	pivot_offset = Vector2(75, 109)
+	# Wider and shorter than it was. The old card was tall enough to
+	# dominate the board and still could not fit a readable name, which
+	# is the worst of both.
+	custom_minimum_size = Vector2(176, 196)
+	pivot_offset = Vector2(88, 98)
 
 	var accent := Design.rarity_color(card.rarity)
 	var border_width: int = Design.RARITY_BORDER.get(card.rarity, 2)
@@ -43,21 +46,41 @@ func _build() -> void:
 	column.add_child(_marker)
 
 	column.add_child(_build_portrait(card))
-	column.add_child(UI.label(card.card_name, Design.FS_SMALL, Design.TEXT, HORIZONTAL_ALIGNMENT_CENTER))
 
-	var role_text: String = "%s %s" % [Design.ROLE_ICON.get(card.role, ""), card.role]
-	var subtitle := UI.label(role_text, Design.FS_MICRO, Design.TEXT_MUTED, HORIZONTAL_ALIGNMENT_CENTER)
-	column.add_child(subtitle)
+	# The name is the one thing that has to be readable at a glance, so
+	# it gets body size and shrinks to fit rather than being set small
+	# enough to always fit.
+	var name_label := UI.label(card.card_name, Design.FS_BODY, Design.TEXT, HORIZONTAL_ALIGNMENT_CENTER)
+	name_label.clip_text = true
+	name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	CardView.apply_rarity_text_style(name_label, card.rarity)
+	column.add_child(name_label)
+
+	# Role and element on one line, so the matchup is readable without
+	# opening anything.
+	var role_text := "%s %s   %s" % [
+		str(Design.ROLE_ICON.get(card.role, "")), card.role,
+		str(Design.ELEMENT_ICON.get(card.element, ""))]
+	column.add_child(UI.label(role_text, Design.FS_SMALL, Design.TEXT_MUTED, HORIZONTAL_ALIGNMENT_CENTER))
 
 	column.add_child(_build_hp())
 	column.add_child(_build_energy())
+
+	# What the card actually does. A board of five portraits with no
+	# abilities on them tells the player nothing about the fight.
+	if card.skill_id != "":
+		var skill := UI.label(Skills.display_name(card.skill_id).to_upper(),
+			Design.FS_MICRO, Design.ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
+		skill.clip_text = true
+		skill.tooltip_text = Skills.text_of(card.skill_id)
+		column.add_child(skill)
 
 	refresh()
 
 
 func _build_portrait(card: CardData) -> Control:
 	var frame := Control.new()
-	frame.custom_minimum_size = Vector2(0, 74)
+	frame.custom_minimum_size = Vector2(0, 66)
 	frame.clip_contents = false
 
 	var clipper := Control.new()
@@ -84,7 +107,7 @@ func _build_portrait(card: CardData) -> Control:
 
 func _build_hp() -> Control:
 	var holder := Control.new()
-	holder.custom_minimum_size = Vector2(0, 18)
+	holder.custom_minimum_size = Vector2(0, 20)
 
 	_hp_bar = ProgressBar.new()
 	_hp_bar.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -93,7 +116,7 @@ func _build_hp() -> Control:
 	_hp_bar.value = combatant.hp
 	holder.add_child(_hp_bar)
 
-	_hp_label = UI.label("", Design.FS_MICRO, Design.TEXT, HORIZONTAL_ALIGNMENT_CENTER)
+	_hp_label = UI.label("", Design.FS_SMALL, Design.TEXT, HORIZONTAL_ALIGNMENT_CENTER)
 	_hp_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_hp_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	holder.add_child(_hp_label)

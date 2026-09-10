@@ -25,9 +25,10 @@ extends Node3D
 #
 # Blocks sit on a grid; the gaps between them are the streets.
 
-# Just over a square kilometre. Big enough that walking it is a
-# journey and a vehicle would earn its place.
-const CITY_HALF := 520.0
+# Just over half a square kilometre - 736 m square. Big enough that
+# walking it is a journey and a car earns its place, small enough that
+# crossing it is not a chore.
+const CITY_HALF := 368.0
 
 # One block, plus the street on two of its sides. Streets are 26 m -
 # wide enough to drive two ways down - and every third one is an avenue
@@ -37,7 +38,7 @@ const AVENUE_WIDTH := 38.0
 const AVENUE_EVERY := 3
 const BLOCK_SIZE := 52.0
 const BLOCK_PITCH := BLOCK_SIZE + STREET_WIDTH
-const BLOCKS_OUT := 6
+const BLOCKS_OUT := 4
 
 # Each block is four lots with alleys between them, so the district has
 # gaps to see through rather than being a solid wall of frontage.
@@ -177,7 +178,9 @@ func _interact() -> void:
 			_talk_to(str(_current["npc"]))
 		_:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-			get_tree().change_scene_to_file(str(_current["route"]))
+			# Leaving a shop drops the player back on its doorstep, not
+			# on the flat menu.
+			Routes.enter(self, str(_current["route"]), Routes.LOBBY)
 
 
 func _open_travel() -> void:
@@ -458,10 +461,10 @@ func _build_skyline() -> void:
 		var width := float(spot["width"])
 		var spin := float(spot["spin"])
 
-		var basis := Basis(Vector3.UP, spin).scaled(
+		var orientation := Basis(Vector3.UP, spin).scaled(
 			Vector3(per_width * width, per_height * height, per_width * width))
 		var origin := at + Vector3(0.0, base_lift * height, 0.0)
-		multi.set_instance_transform(i, Transform3D(basis, origin))
+		multi.set_instance_transform(i, Transform3D(orientation, origin))
 
 		if fallback:
 			var shade := Color("#161b28").lerp(Color("#232a3d"), _rng.randf())

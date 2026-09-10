@@ -32,6 +32,16 @@ static func caption(text: String) -> Label:
 	return label(text, Design.FS_SMALL, Design.TEXT_MUTED)
 
 
+# A caption that wraps rather than running off the edge. For anything
+# whose length is not known in advance - a list of filenames, a report
+# line, a sentence built at runtime.
+static func wrapped_caption(text: String) -> Label:
+	var l := caption(text)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	return l
+
+
 # Small-caps section header with letter spacing - a cheap, high-impact
 # typography trick that stops headings looking like ordinary body text.
 static func section(text: String) -> Label:

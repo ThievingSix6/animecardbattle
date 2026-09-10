@@ -41,6 +41,8 @@ func back_route() -> String:
 			return Routes.CLAN
 		"gauntlet", "duel":
 			return Routes.LOBBY
+	# A stage fight belongs to its zone, whichever hub the player came
+	# in from.
 	return Routes.ZONE
 
 # The board is a fixed layout that fills the window - never scrolled.

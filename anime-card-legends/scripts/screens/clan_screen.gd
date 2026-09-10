@@ -17,7 +17,6 @@ var _raid_label: Label
 
 
 func screen_title() -> String: return "Clan"
-func back_route() -> String: return Routes.MAIN
 
 
 func build_content() -> void:

@@ -358,7 +358,7 @@ func _card_art_row() -> Control:
 
 	if files.is_empty():
 		box.add_child(UI.label("Card art: none found", Design.FS_BODY, Design.DANGER))
-		box.add_child(UI.caption(
+		box.add_child(UI.wrapped_caption(
 			"Drop images into res://art/cards/. The filename becomes the card "
 			+ "name: ashen_knight.png -> \"Ashen Knight\". Until then the roster "
 			+ "falls back to procedural names."))
@@ -374,9 +374,9 @@ func _card_art_row() -> Control:
 		var card := CardLibrary.card_from_path(files[i])
 		if card != null:
 			sample.append("%s (%s)" % [card.card_name, card.rarity])
-	box.add_child(UI.caption("Reads as: " + ", ".join(sample)))
+	box.add_child(UI.wrapped_caption("Reads as: " + ", ".join(sample)))
 	if files.size() > shown:
-		box.add_child(UI.caption("...and %d more" % (files.size() - shown)))
+		box.add_child(UI.wrapped_caption("...and %d more" % (files.size() - shown)))
 
 	return box
 
@@ -402,10 +402,10 @@ func _banner_row() -> Control:
 	if missing.is_empty():
 		return box
 
-	box.add_child(UI.caption(
+	box.add_child(UI.wrapped_caption(
 		"Banners load by exact filename from res://art/banners/. These are "
 		+ "drawing a generated gradient because no file of that name was found:"))
-	box.add_child(UI.caption("  " + ", ".join(missing) + "  (.png, .jpg or .webp)"))
+	box.add_child(UI.wrapped_caption("  " + ", ".join(missing) + "  (.png, .jpg or .webp)"))
 	return box
 
 
@@ -425,22 +425,22 @@ func _model_row() -> Control:
 		Design.FS_BODY, colour))
 
 	if not missing.is_empty():
-		box.add_child(UI.caption(
+		box.add_child(UI.wrapped_caption(
 			"Models load by exact zone id from res://art/models/zones/. "
 			+ "These zones are still building their landmarks from primitives:"))
-		box.add_child(UI.caption("  " + ", ".join(missing) + "  (.glb preferred)"))
+		box.add_child(UI.wrapped_caption("  " + ", ".join(missing) + "  (.glb preferred)"))
 
-	box.add_child(UI.caption(_emissive_text()))
-	box.add_child(UI.caption(_prop_text()))
-	box.add_child(UI.caption(_npc_text()))
-	box.add_child(UI.caption(_sky_text()))
+	box.add_child(UI.wrapped_caption(_emissive_text()))
+	box.add_child(UI.wrapped_caption(_prop_text()))
+	box.add_child(UI.wrapped_caption(_npc_text()))
+	box.add_child(UI.wrapped_caption(_sky_text()))
 
 	if Models.has_player():
 		box.add_child(UI.label("Player model: loaded", Design.FS_BODY, Design.SUCCESS))
-		box.add_child(UI.caption(_player_animation_text()))
+		box.add_child(UI.wrapped_caption(_player_animation_text()))
 	else:
 		box.add_child(UI.label("Player model: none found", Design.FS_BODY, Design.ACCENT))
-		box.add_child(UI.caption(
+		box.add_child(UI.wrapped_caption(
 			"Drop a rigged character at res://art/models/player.glb to replace "
 			+ "the placeholder capsule. See res://art/models/README.txt."))
 
@@ -573,10 +573,10 @@ func _icon_row() -> Control:
 	if missing.is_empty():
 		return box
 
-	box.add_child(UI.caption(
+	box.add_child(UI.wrapped_caption(
 		"Icons load by exact filename from res://art/icons/. These are still "
 		+ "using emoji because no file of that name was found:"))
-	box.add_child(UI.caption("  " + ", ".join(missing) + "  (.png or .svg)"))
+	box.add_child(UI.wrapped_caption("  " + ", ".join(missing) + "  (.png or .svg)"))
 	return box
 
 
@@ -604,8 +604,8 @@ func _audio_row() -> Control:
 	if missing.is_empty():
 		return box
 
-	box.add_child(UI.caption(
+	box.add_child(UI.wrapped_caption(
 		"Sounds load by exact filename from res://audio/ (.ogg, .wav or .mp3). "
 		+ "Not found:"))
-	box.add_child(UI.caption("  " + ", ".join(missing)))
+	box.add_child(UI.wrapped_caption("  " + ", ".join(missing)))
 	return box

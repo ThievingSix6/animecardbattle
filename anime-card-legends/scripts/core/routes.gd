@@ -28,9 +28,27 @@ const CLAN     := "res://scenes/Clan.tscn"
 # place it was pressed rather than always the main menu.
 static var settings_return := ""
 
+# The hub a screen was opened from. The city and the flat menu are both
+# hubs, so a screen entered from the city has to come back out into the
+# city rather than dumping the player on the menu.
+static var hub_return := ""
+
 
 static func go(node: Node, route: String) -> void:
 	node.get_tree().change_scene_to_file(route)
+
+
+# Opens a destination and records the hub to return to.
+static func enter(node: Node, route: String, from_hub: String) -> void:
+	hub_return = from_hub
+	node.get_tree().change_scene_to_file(route)
+
+
+# Where a screen's back button should go: the hub it was opened from.
+static func back_to_hub() -> String:
+	if hub_return != "":
+		return hub_return
+	return MAIN
 
 
 # Opens settings and records the way home.

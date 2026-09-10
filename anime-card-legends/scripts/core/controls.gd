@@ -121,18 +121,18 @@ func _register(action: Dictionary) -> void:
 
 	for code in action["keys"]:
 		var key := InputEventKey.new()
-		key.physical_keycode = int(code)
+		key.physical_keycode = int(code) as Key
 		InputMap.action_add_event(action_name, key)
 
 	for button in action["buttons"]:
 		var pad := InputEventJoypadButton.new()
-		pad.button_index = int(button)
+		pad.button_index = int(button) as JoyButton
 		InputMap.action_add_event(action_name, pad)
 
 	for entry in action["axis"]:
 		var pair: Array = entry
 		var motion := InputEventJoypadMotion.new()
-		motion.axis = int(pair[0])
+		motion.axis = int(pair[0]) as JoyAxis
 		motion.axis_value = float(pair[1])
 		InputMap.action_add_event(action_name, motion)
 

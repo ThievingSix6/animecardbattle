@@ -24,7 +24,9 @@ const DEFINITIONS: Array[Dictionary] = [
 		"name": "Diablo",
 		"title": "Lord of Hatred",
 		"tint": Color("#ef4444"),
-		"height": 3.4,
+		# Five times what he was. He is the Lord of Hatred; he should
+		# read as a landmark from across the plaza.
+		"height": 17.0,
 		"wanders": false,
 	},
 	{
@@ -32,7 +34,7 @@ const DEFINITIONS: Array[Dictionary] = [
 		"name": "The Boy",
 		"title": "undefeated",
 		"tint": Color("#f5a623"),
-		"height": 1.6,
+		"height": 1.2,
 		"wanders": true,
 	},
 	{
@@ -40,7 +42,7 @@ const DEFINITIONS: Array[Dictionary] = [
 		"name": "The Jokester",
 		"title": "reliable source",
 		"tint": Color("#a855f7"),
-		"height": 1.8,
+		"height": 1.35,
 		"wanders": false,
 	},
 ]

@@ -24,8 +24,10 @@ var _toast_layer: VBoxContainer
 func screen_title() -> String:
 	return ""
 
+# The city and the flat menu are both hubs, so back means whichever one
+# the player actually came in from.
 func back_route() -> String:
-	return Routes.MAIN
+	return Routes.back_to_hub()
 
 func shows_currency() -> bool:
 	return true
@@ -41,6 +43,12 @@ func requires_slot() -> bool:
 # that need a fixed full-rect layout (the battle board), opt out.
 func scrolls_content() -> bool:
 	return true
+
+# Widest the content column is allowed to get. Text set across the full
+# width of a wide window is unreadable, and a panel that wide pushes its
+# right-hand content past the edge. Zero means no cap.
+func content_max_width() -> int:
+	return 1100
 
 # Every screen carries a way into settings. The settings screen itself
 # turns this off, and so can anything that needs its top-right corner.
@@ -131,11 +139,11 @@ func _build_chrome() -> void:
 		page.follow_focus = true
 		content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-		page.add_child(content)
+		page.add_child(_width_capped(content))
 		root.add_child(page)
 	else:
 		content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		root.add_child(content)
+		root.add_child(_width_capped(content))
 
 	# Toasts float above everything.
 	_toast_layer = UI.vbox(Design.S2)
@@ -156,6 +164,31 @@ func _own_route() -> String:
 	if path == "":
 		return Routes.MAIN
 	return path
+
+
+# Centres the content column and stops it growing past
+# content_max_width(). A panel stretched across a 2560px window pushes
+# its right-hand content off the edge, and body text set that wide is
+# unreadable regardless.
+func _width_capped(inner: Control) -> Control:
+	var cap := content_max_width()
+	if cap <= 0:
+		return inner
+
+	var gutter := MarginContainer.new()
+	gutter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gutter.size_flags_vertical = inner.size_flags_vertical
+	gutter.add_child(inner)
+
+	# Recomputed on resize rather than pinned, so a narrow window still
+	# uses every pixel it has.
+	gutter.resized.connect(func():
+		var extra: int = maxi(0, int(gutter.size.x) - cap)
+		var side: int = extra / 2
+		gutter.add_theme_constant_override("margin_left", side)
+		gutter.add_theme_constant_override("margin_right", side))
+
+	return gutter
 
 
 func _load_background(key: String) -> Texture2D:
