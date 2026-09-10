@@ -45,9 +45,9 @@ const FAMILY_LABEL := {
 }
 
 const FAMILY_ICON := {
-	"defense": "\u{1F6E1}", "offense": "\u2694", "element": "\u{1F525}",
-	"death": "\u2620", "summon": "\u{1F479}", "support": "\u2764",
-	"control": "\u{1F9E0}", "risk": "\u{1FA78}", "legendary": "\u{1F451}",
+	"defense": "\ud83d\udee1", "offense": "\u2694", "element": "\ud83d\udd25",
+	"death": "\u2620", "summon": "\ud83d\udc79", "support": "\u2764",
+	"control": "\ud83e\udde0", "risk": "\ud83e\ude78", "legendary": "\ud83d\udc51",
 }
 
 const FAMILY_COLOR := {

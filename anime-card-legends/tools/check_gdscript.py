@@ -14,6 +14,10 @@ Catches:
   6. unreachable code after a return at function-body level
      (catches a function accidentally spliced into another)
   7. locals shadowing GDScript built-in functions
+  8. invalid unicode escapes -- GDScript takes \\uXXXX (4 hex) or
+     \\UXXXXXX (6 hex), NOT the \\u{...} form other languages use.
+     One of these takes down the whole class, and every class that
+     references it, with a bare "could not resolve class" error.
 """
 import re, sys, pathlib
 
@@ -129,6 +133,17 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
         m = re.match(r"var\s+(\w+)\s*[:=]", line.strip())
         if m and m.group(1) in BUILTINS:
             add(rel, i, "SHADOWS-BUILTIN", line)
+
+    # 8. unicode escapes GDScript cannot parse
+    for i, line in enumerate(lines, 1):
+        for m in re.finditer(r"\\u\{[^}]*\}", line):
+            add(rel, i, "BAD-ESCAPE", f"{m.group()} - GDScript has no \\u{{...}}; "
+                                      f"use \\Uxxxxxx or the literal character")
+        for m in re.finditer(r"\\u(?![0-9A-Fa-f]{4})", line):
+            if line[m.start():m.start() + 3] != "\\u{":
+                add(rel, i, "BAD-ESCAPE", r"\u needs exactly 4 hex digits")
+        for m in re.finditer(r"\\U(?![0-9A-Fa-f]{6})", line):
+            add(rel, i, "BAD-ESCAPE", r"\U needs exactly 6 hex digits")
 
 
 if issues:
