@@ -25,13 +25,25 @@ extends RefCounted
 const FOLDER := "res://art/models/"
 const ZONE_FOLDER := FOLDER + "zones/"
 const PROP_FOLDER := FOLDER + "props/"
+const NPC_FOLDER := FOLDER + "npc/"
 
 # Sidecar emissive maps. A .glb that was exported without its emission
 # slot assigned still ships the map as a loose file, so rather than make
 # you re-author the material, the loader picks it up from beside the
 # model.
 const IMAGE_EXTENSIONS: Array[String] = ["png", "jpg", "jpeg", "webp", "tga"]
-const EMISSIVE_ENERGY := 1.6
+
+# Kept at 1.0 on purpose. A proper emissive map is already a mask - black
+# where the surface does not glow - so multiplying it up only pushes the
+# lit parts past what the renderer can show. On GL Compatibility, which
+# is what this project uses, anything over 1.0 clips to flat white.
+const EMISSIVE_ENERGY := 1.0
+
+# Some exporters emit a placeholder emissive map that is a single flat
+# colour - usually pure white, which lights the entire model uniformly
+# and hides the artwork underneath. Those are rejected.
+const PLACEHOLDER_MEAN := 0.86
+const PLACEHOLDER_SPREAD := 0.06
 
 # .glb is the format to prefer - one self-contained file, textures
 # included, no missing-texture surprises.
@@ -76,6 +88,15 @@ static func prop_resource(prop_name: String) -> Resource:
 
 static func has_prop(prop_name: String) -> bool:
 	return prop_resource(prop_name) != null
+
+
+# The people in the city: diablo, the_boy, the_jokester.
+static func npc_resource(npc_id: String) -> Resource:
+	return _find(NPC_FOLDER + npc_id)
+
+
+static func has_npc(npc_id: String) -> bool:
+	return npc_resource(npc_id) != null
 
 
 static func has_zone(zone_id: String) -> bool:
@@ -140,6 +161,79 @@ static func spawn_prop(prop_name: String) -> Node3D:
 	return node
 
 
+static func spawn_npc(npc_id: String) -> Node3D:
+	var node := spawn(npc_resource(npc_id))
+	apply_emissive(node, NPC_FOLDER + npc_id)
+	return node
+
+
+# The first mesh inside an imported model, for drawing many copies of
+# one building through a single MultiMesh instead of a node each.
+static func first_mesh(root: Node) -> Mesh:
+	if root is MeshInstance3D:
+		var as_mesh: MeshInstance3D = root
+		if as_mesh.mesh != null:
+			return as_mesh.mesh
+	for child in root.get_children():
+		var found := first_mesh(child)
+		if found != null:
+			return found
+	return null
+
+
+# The material a MultiMesh should draw that mesh with, emissive sidecar
+# included - a MultiMeshInstance3D has one material for every copy.
+static func first_material(root: Node, base_path: String) -> Material:
+	var node := _first_mesh_node(root)
+	if node == null:
+		return null
+
+	var source: Material = node.get_surface_override_material(0)
+	if source == null and node.mesh != null and node.mesh.get_surface_count() > 0:
+		source = node.mesh.surface_get_material(0)
+	if source == null or not (source is StandardMaterial3D):
+		return source
+
+	var texture := emissive_texture(base_path)
+	if texture == null:
+		return source
+
+	var base: StandardMaterial3D = source
+	if base.emission_enabled and base.emission_texture != null:
+		return base
+
+	var lit: StandardMaterial3D = base.duplicate()
+	lit.emission_enabled = true
+	lit.emission_texture = texture
+	lit.emission = Color.WHITE
+	lit.emission_energy_multiplier = RenderMode.emission(EMISSIVE_ENERGY)
+	return lit
+
+
+static func _first_mesh_node(root: Node) -> MeshInstance3D:
+	if root is MeshInstance3D:
+		return root
+	for child in root.get_children():
+		var found := _first_mesh_node(child)
+		if found != null:
+			return found
+	return null
+
+
+# The size of a mesh scaled so it stands `target_height` tall, without
+# instancing anything - what a MultiMesh needs to place its copies.
+static func mesh_fit(mesh: Mesh, target_height: float) -> Dictionary:
+	var box := mesh.get_aabb()
+	if box.size.y <= 0.0001:
+		return {"scale": 1.0, "offset": 0.0, "size": box.size}
+	var factor := target_height / box.size.y
+	return {
+		"scale": factor,
+		"offset": -box.position.y * factor,
+		"size": box.size * factor,
+	}
+
+
 # --- Emissive sidecars ----------------------------------------------------
 #
 # Exporters routinely drop the emission slot, so the map arrives as a
@@ -168,7 +262,7 @@ static func _scan_emissive(base_path: String) -> Texture2D:
 	for ext in IMAGE_EXTENSIONS:
 		var path := base_path + "_emissive." + ext
 		if ResourceLoader.exists(path):
-			return load(path)
+			return _accept(load(path))
 
 	# A folder named after the model: take any file with "emissive" in it.
 	var folder := base_path + "/"
@@ -193,7 +287,55 @@ static func _scan_emissive(base_path: String) -> Texture2D:
 	if found.is_empty():
 		return null
 	found.sort()
-	return load(found[0])
+	return _accept(load(found[0]))
+
+
+# Rejects a flat placeholder map. Sampled on a coarse grid - this runs
+# once per model and only needs to tell "one solid colour" from "an
+# actual mask".
+static func _accept(texture: Texture2D) -> Texture2D:
+	if texture == null:
+		return null
+
+	var image := texture.get_image()
+	if image == null:
+		return texture
+	if image.is_compressed():
+		# decompress() fails on formats without a CPU decoder; if it
+		# cannot be read, trust the file.
+		if image.decompress() != OK:
+			return texture
+
+	var width := image.get_width()
+	var height := image.get_height()
+	if width < 2 or height < 2:
+		return texture
+
+	var steps := 16
+	var total := 0.0
+	var lowest := 1.0
+	var highest := 0.0
+
+	for ix in steps:
+		for iy in steps:
+			var x := int(float(ix) / float(steps) * float(width))
+			var y := int(float(iy) / float(steps) * float(height))
+			var pixel := image.get_pixel(x, y)
+			var luminance := pixel.r * 0.2126 + pixel.g * 0.7152 + pixel.b * 0.0722
+			total += luminance
+			lowest = minf(lowest, luminance)
+			highest = maxf(highest, luminance)
+
+	var mean := total / float(steps * steps)
+	var spread := highest - lowest
+
+	# Bright and flat: a placeholder, not a mask.
+	if mean >= PLACEHOLDER_MEAN and spread <= PLACEHOLDER_SPREAD:
+		push_warning("[Models] ignoring a flat emissive map at "
+			+ texture.resource_path + " - it would light the whole model.")
+		return null
+
+	return texture
 
 
 static func has_emissive(base_path: String) -> bool:
@@ -243,7 +385,7 @@ static func _light_surface(mesh_node: MeshInstance3D, surface: int, texture: Tex
 	lit.emission_enabled = true
 	lit.emission_texture = texture
 	lit.emission = Color.WHITE
-	lit.emission_energy_multiplier = energy
+	lit.emission_energy_multiplier = RenderMode.emission(energy)
 	mesh_node.set_surface_override_material(surface, lit)
 
 

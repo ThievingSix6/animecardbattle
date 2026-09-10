@@ -289,6 +289,8 @@ func _model_row() -> Control:
 
 	box.add_child(UI.caption(_emissive_text()))
 	box.add_child(UI.caption(_prop_text()))
+	box.add_child(UI.caption(_npc_text()))
+	box.add_child(UI.caption(_sky_text()))
 
 	if Models.has_player():
 		box.add_child(UI.label("Player model: loaded", Design.FS_BODY, Design.SUCCESS))
@@ -326,6 +328,43 @@ func _emissive_text() -> String:
 		return ("Emissive maps: none found. Drop <model>_emissive.png beside "
 			+ "the model, or in a folder named after it. See art/models/props/README.txt.")
 	return "Emissive maps: %s lit  ·  %s has none" % [", ".join(lit), ", ".join(dark)]
+
+
+# Which NPC models are in, and for the ones that are, which animation
+# clips their names actually matched.
+func _npc_text() -> String:
+	var lines: Array[String] = []
+
+	for definition in Npcs.DEFINITIONS:
+		var id := str(definition["id"])
+		if not Models.has_npc(id):
+			lines.append("%s: no model" % id)
+			continue
+
+		var model := Models.spawn_npc(id)
+		var anim := Models.find_animation_player(model)
+		if anim == null:
+			lines.append("%s: loaded, no animations" % id)
+		else:
+			var idle_words: Array[String] = ["idle", "stand", "breath", "talk"]
+			var run_words: Array[String] = ["run", "walk", "jog", "move"]
+			var defeat_words: Array[String] = ["defeat", "death", "die", "lose", "fall", "kneel"]
+			lines.append("%s: idle %s / run %s / defeat %s" % [
+				id,
+				_or_none(Models.animation_named(anim, idle_words)),
+				_or_none(Models.animation_named(anim, run_words)),
+				_or_none(Models.animation_named(anim, defeat_words))])
+		if model != null:
+			model.queue_free()
+
+	return "NPCs — " + "   ·   ".join(lines)
+
+
+func _sky_text() -> String:
+	if SkyBuilder.has_panorama():
+		return "Sky: using a supplied panorama."
+	return ("Sky: generated night sky with stars. Drop a 360 panorama at "
+		+ "res://art/sky/city.hdr to replace it.")
 
 
 # The two shared props the city and the portal look for.

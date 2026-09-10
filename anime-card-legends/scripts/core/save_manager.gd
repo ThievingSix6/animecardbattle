@@ -8,7 +8,7 @@ extends RefCounted
 # =========================================================
 
 const SLOT_COUNT := 3
-const VERSION := 5
+const VERSION := 6
 
 # Legacy single-slot file, migrated into slot 1 on first run.
 const LEGACY_PATH := "user://save.json"
@@ -133,6 +133,9 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"talents": progression.talents,
 		"highest_floor": progression.highest_floor,
 		"roll_packs": progression.roll_packs,
+		"gauntlet_best": progression.gauntlet_best,
+		"gauntlet_cleared": progression.gauntlet_cleared,
+		"boy_defeated": progression.boy_defeated,
 		"boss_pool_unlocked": gacha.boss_pool_unlocked,
 		"pity": gacha.pity,
 		"items_owned": equipment.owned,
@@ -201,6 +204,13 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 	progression.roll_packs.clear()
 	for key in parsed.get("roll_packs", {}).keys():
 		progression.roll_packs[key] = int(parsed["roll_packs"][key])
+
+	# A gauntlet run itself is never saved - it is meant to be finished in
+	# one sitting - but what it proved is.
+	progression.gauntlet_best = int(parsed.get("gauntlet_best", 0))
+	progression.gauntlet_cleared = bool(parsed.get("gauntlet_cleared", false))
+	progression.boy_defeated = bool(parsed.get("boy_defeated", false))
+	progression.end_gauntlet()
 
 	gacha.boss_pool_unlocked = bool(parsed.get("boss_pool_unlocked", false))
 

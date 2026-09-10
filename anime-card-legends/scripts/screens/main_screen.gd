@@ -76,7 +76,7 @@ func _switch_profile() -> void:
 func _navigate(route: String) -> void:
 	if route == "battle":
 		var next_floor: int = GameState.progression.highest_floor + 1
-		GameState.progression.pending_floor = min(next_floor, Config.MAX_FLOOR)
+		GameState.progression.queue_floor(mini(next_floor, Config.MAX_FLOOR))
 		Routes.go(self, Routes.BATTLE)
 	else:
 		Routes.go(self, route)

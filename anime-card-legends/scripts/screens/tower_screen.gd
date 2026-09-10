@@ -83,7 +83,7 @@ func _build_node(floor_number: int) -> Button:
 
 	if unlocked:
 		node.pressed.connect(func():
-			GameState.progression.pending_floor = floor_number
+			GameState.progression.queue_floor(floor_number)
 			Routes.go(self, Routes.BATTLE)
 		)
 

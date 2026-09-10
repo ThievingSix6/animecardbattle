@@ -9,8 +9,88 @@ var talents := {"speed": 0, "luck": 0, "multi": 0}
 var highest_floor := 0
 var pending_floor := 1
 var pending_zone := 0        # transient: which zone the 3D world should build
-var pending_raid := false    # transient: the next battle is the clan raid
 var roll_packs: Dictionary = {}
+
+# What the next battle actually is. Transient - the battle screen
+# consumes it on entry so a later ordinary fight cannot inherit it.
+#   "floor"    a campaign stage, using pending_floor
+#   "raid"     the clan raid boss
+#   "gauntlet" a wave of the Hellfire Gauntlet, using gauntlet_wave
+#   "duel"     The Boy
+var pending_mode := "floor"
+
+# ---------------- HELLFIRE GAUNTLET ----------------
+
+# Which wave the current run is on, 0-based. -1 means no run.
+var gauntlet_wave := -1
+# card_id -> fraction of max HP the card carries into the next wave.
+var gauntlet_hp: Dictionary = {}
+# Best wave ever reached, kept across runs and saved.
+var gauntlet_best := 0
+var gauntlet_cleared := false
+
+# Has The Boy ever been beaten? Kept for his dialogue, and saved.
+var boy_defeated := false
+
+
+func queue_floor(floor_number: int) -> void:
+	pending_mode = "floor"
+	pending_floor = floor_number
+
+
+func queue_raid() -> void:
+	pending_mode = "raid"
+
+
+func queue_duel() -> void:
+	pending_mode = "duel"
+
+
+# Starts a fresh gauntlet run: full health, wave one.
+func start_gauntlet() -> void:
+	gauntlet_wave = 0
+	gauntlet_hp.clear()
+	pending_mode = "gauntlet"
+
+
+func queue_gauntlet_wave() -> void:
+	pending_mode = "gauntlet"
+
+
+func gauntlet_running() -> bool:
+	return gauntlet_wave >= 0
+
+
+# Records what the team has left, so the next wave starts wounded.
+func store_gauntlet_health(fractions: Dictionary) -> void:
+	gauntlet_hp = fractions.duplicate()
+
+
+# The fraction a card should start the next wave on: what it had left,
+# mended a little. A card that died stays dead for the rest of the run.
+func gauntlet_health_for(card_id: String) -> float:
+	if not gauntlet_hp.has(card_id):
+		return 1.0
+	var left := float(gauntlet_hp[card_id])
+	if left <= 0.0:
+		return 0.0
+	return minf(1.0, left + (1.0 - left) * Gauntlet.MEND_BETWEEN_WAVES)
+
+
+func advance_gauntlet() -> bool:
+	gauntlet_wave += 1
+	gauntlet_best = maxi(gauntlet_best, gauntlet_wave)
+	if gauntlet_wave >= Gauntlet.WAVES:
+		gauntlet_cleared = true
+		end_gauntlet()
+		return false
+	return true
+
+
+func end_gauntlet() -> void:
+	gauntlet_wave = -1
+	gauntlet_hp.clear()
+	pending_mode = "floor"
 
 
 # ---------------- TALENTS ----------------

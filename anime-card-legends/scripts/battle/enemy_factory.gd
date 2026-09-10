@@ -59,6 +59,121 @@ static func build_raid(clan_level: int, boss_name: String) -> Array[CardData]:
 	return out
 
 
+# ---------------- THE HELLFIRE GAUNTLET ----------------
+
+# One wave of Diablo's challenge. The captain of each wave is the named
+# enemy from the wave table; the rest are its rank and file.
+static func build_gauntlet_wave(wave_index: int) -> Array[CardData]:
+	var wave := Gauntlet.wave(wave_index)
+	var count: int = int(wave["count"])
+	var scale: float = float(wave["scale"])
+	var is_final := Gauntlet.is_final(wave_index)
+
+	var out: Array[CardData] = []
+	for i in count:
+		var is_captain := i == count - 1
+		out.append(_build_hellfire(wave_index, i, scale, is_captain, is_final))
+	return out
+
+
+static func _build_hellfire(wave_index: int, slot: int, scale: float, is_captain: bool, is_final: bool) -> CardData:
+	var enemy := CardData.new()
+	enemy.card_id = "gauntlet_%d_%d" % [wave_index, slot]
+	enemy.element = Gauntlet.ELEMENT
+	enemy.origin_tag = "gauntlet"
+	enemy.modifier = "Normal"
+
+	var role := "DPS"
+	var role_pool: Array[String] = ["DPS", "Tank", "Assassin", "Support"]
+	if not is_captain:
+		role = role_pool[randi() % role_pool.size()]
+		enemy.card_name = Gauntlet.MINION_NAMES[randi() % Gauntlet.MINION_NAMES.size()]
+		enemy.rarity = "Rare"
+		enemy.basic_ability = "Sear"
+		enemy.ultimate_ability = "Immolate"
+		enemy.skill_id = "cinderbrand"
+	else:
+		role = "Tank"
+		enemy.card_name = str(Gauntlet.wave(wave_index)["captain"])
+		enemy.rarity = "Legendary"
+		enemy.basic_ability = "Hateful Blow"
+		enemy.ultimate_ability = "Hellfire"
+		enemy.basic_target_mode = "aoe"
+		enemy.ultimate_target_mode = "aoe"
+		enemy.skill_id = "ironhide"
+
+	# Diablo himself: the only enemy in the game that is genuinely
+	# supposed to feel unfair on the first attempt.
+	var captain_mult := 1.0
+	if is_captain:
+		captain_mult = 1.7
+	if is_captain and is_final:
+		captain_mult = 2.6
+		enemy.rarity = "Mythic"
+		enemy.card_name = Gauntlet.BOSS_NAME
+		enemy.skill_id = "last_stand"
+
+	enemy.role = role
+	var shape: Dictionary = Config.ROLE_STATS.get(role, Config.ROLE_STATS["DPS"])
+
+	enemy.attack  = max(5,  int(BASE["attack"]  * scale * captain_mult * shape["attack"] * 1.35))
+	enemy.defense = max(3,  int(BASE["defense"] * scale * captain_mult * shape["defense"] * 1.2))
+	enemy.health  = max(60, int(BASE["health"]  * scale * captain_mult * shape["health"] * 1.5))
+	enemy.speed   = max(4,  int(BASE["speed"]   * scale * shape["speed"]))
+
+	Leveling.apply(enemy)
+	return enemy
+
+
+# ---------------- THE BOY ----------------
+
+# The strongest deck in the game, and deliberately not scaled off the
+# player's own team: he is a wall you come back to, not a mirror match.
+# Five apex cards, each built to be the best example of its role.
+const BOY_DECK: Array[Dictionary] = [
+	{"name": "First Light",    "role": "Tank",     "element": "Light", "skill": "ironhide"},
+	{"name": "Nine Cuts",      "role": "Assassin", "element": "Dark",  "skill": "executioners_mark"},
+	{"name": "The Long Note",  "role": "Support",  "element": "Wind",  "skill": "rallying_cry"},
+	{"name": "Quiet Hour",     "role": "Healer",   "element": "Water", "skill": "lifebloom"},
+	{"name": "Last Word",      "role": "DPS",      "element": "Fire",  "skill": "kingbreaker"},
+]
+
+const BOY_SCALE := 5.2
+
+
+static func build_boy_deck() -> Array[CardData]:
+	var out: Array[CardData] = []
+
+	for i in BOY_DECK.size():
+		var entry: Dictionary = BOY_DECK[i]
+		var role := str(entry["role"])
+		var shape: Dictionary = Config.ROLE_STATS.get(role, Config.ROLE_STATS["DPS"])
+
+		var card := CardData.new()
+		card.card_id = "boy_%d" % i
+		card.card_name = str(entry["name"])
+		card.role = role
+		card.element = str(entry["element"])
+		card.rarity = "Secret"
+		card.modifier = "Normal"
+		card.origin_tag = "boy"
+		card.basic_ability = "Perfect Form"
+		card.ultimate_ability = "Nothing Wasted"
+		card.basic_target_mode = "active"
+		card.ultimate_target_mode = "aoe"
+		card.skill_id = str(entry["skill"])
+
+		card.attack  = max(5,  int(BASE["attack"]  * BOY_SCALE * shape["attack"] * 1.4))
+		card.defense = max(3,  int(BASE["defense"] * BOY_SCALE * shape["defense"] * 1.3))
+		card.health  = max(60, int(BASE["health"]  * BOY_SCALE * shape["health"] * 1.6))
+		card.speed   = max(4,  int(BASE["speed"]   * BOY_SCALE * shape["speed"]))
+
+		Leveling.apply(card)
+		out.append(card)
+
+	return out
+
+
 static func _build(tier: Dictionary, floor_number: int, slot: int, scale: float, is_boss: bool) -> CardData:
 	var names: Array = tier["names"]
 	var roles: Array = tier["roles"]

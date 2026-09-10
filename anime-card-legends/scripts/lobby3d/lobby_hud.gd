@@ -63,7 +63,7 @@ func _build() -> void:
 	top.add_child(_currency)
 
 	# Controls hint
-	var hint := UI.caption("WASD move  ·  Mouse look  ·  Space jump  ·  Esc free cursor")
+	var hint := UI.caption(_controls_hint())
 	hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	hint.offset_bottom = -Design.S4
 	hint.offset_top = -Design.S6
@@ -85,6 +85,16 @@ func _build() -> void:
 	_prompt_label = UI.label("", Design.FS_HEADING, Design.ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
 	_prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_prompt_panel.add_child(_prompt_label)
+
+
+# Named for whatever is actually plugged in, rather than always
+# telling a controller player to press ENTER.
+func _controls_hint() -> String:
+	if Controls.using_controller():
+		return ("Left stick move  ·  Right stick look  ·  A jump  ·  "
+			+ "X interact  ·  L3 sprint  ·  B back")
+	return ("WASD move  ·  Mouse look  ·  Space jump  ·  E / Enter interact  ·  "
+		+ "Shift sprint  ·  Esc free cursor")
 
 
 func show_prompt(message: String) -> void:

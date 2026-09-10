@@ -10,13 +10,16 @@ extends CharacterBody3D
 # the cursor.
 # =========================================================
 
-const SPEED := 7.5
+const SPEED := 8.5
+const SPRINT_MULT := 2.1
 const ACCEL := 12.0
 const JUMP_VELOCITY := 5.2
 const GRAVITY := 18.0
 const TURN_SPEED := 11.0
 
 const MOUSE_SENS := 0.0032
+# Radians per second at full right-stick deflection.
+const STICK_SENS := 2.6
 const PITCH_MIN := -0.9
 const PITCH_MAX := 0.45
 const CAM_DISTANCE := 9.0
@@ -74,9 +77,9 @@ func _build_body() -> void:
 	var torso := MeshInstance3D.new()
 	var capsule := CapsuleMesh.new()
 	capsule.radius = 0.45
-	capsule.height = 1.7
+	capsule.height = BODY_HEIGHT * 0.9
 	torso.mesh = capsule
-	torso.position.y = 1.0
+	torso.position.y = BODY_HEIGHT * 0.5
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color("#f5a623")
 	mat.roughness = 0.5
@@ -150,8 +153,15 @@ func _update_animation(moving: bool) -> void:
 		_play_animation(_anim_jump)
 	elif moving and _anim_run != "":
 		_play_animation(_anim_run)
+		# The run clip plays faster while sprinting rather than the feet
+		# sliding across the ground.
+		if Input.is_action_pressed("acl_sprint"):
+			_anim.speed_scale = SPRINT_MULT * 0.7
+		else:
+			_anim.speed_scale = 1.0
 	elif _anim_idle != "":
 		_play_animation(_anim_idle)
+		_anim.speed_scale = 1.0
 
 
 func _build_camera() -> void:
@@ -187,15 +197,29 @@ func _unhandled_input(event: InputEvent) -> void:
 		_capture_mouse(false)
 
 
+# Right-stick look. Frame-rate independent, unlike mouse motion, which
+# already arrives as a per-event delta.
+func _apply_stick_look(delta: float) -> void:
+	var look := Controls.look_vector()
+	if look == Vector2.ZERO:
+		return
+	_yaw -= look.x * STICK_SENS * delta
+	_pitch = clampf(_pitch - look.y * STICK_SENS * delta, PITCH_MIN, PITCH_MAX)
+
+
 func _physics_process(delta: float) -> void:
+	_apply_stick_look(delta)
 	_apply_camera()
 
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
-	elif Input.is_key_pressed(KEY_SPACE):
+	elif Input.is_action_pressed("acl_jump"):
 		velocity.y = JUMP_VELOCITY
 
-	var input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	# Bound to WASD, the arrows, the d-pad and the left stick at once -
+	# see scripts/core/controls.gd. The old ui_* actions were arrows and
+	# d-pad only, which is why WASD did nothing.
+	var input := Controls.move_vector()
 	var direction := Vector3.ZERO
 
 	if input != Vector2.ZERO:
@@ -204,9 +228,13 @@ func _physics_process(delta: float) -> void:
 		var basis_x := Vector3(cos(_yaw), 0.0, -sin(_yaw))
 		direction = (basis_x * input.x + basis_z * input.y).normalized()
 
-	var target := direction * SPEED
-	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta * SPEED)
-	velocity.z = move_toward(velocity.z, target.z, ACCEL * delta * SPEED)
+	var speed := SPEED
+	if Input.is_action_pressed("acl_sprint"):
+		speed *= SPRINT_MULT
+
+	var target := direction * speed
+	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta * speed)
+	velocity.z = move_toward(velocity.z, target.z, ACCEL * delta * speed)
 
 	move_and_slide()
 

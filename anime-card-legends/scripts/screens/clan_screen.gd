@@ -170,7 +170,7 @@ func _start_raid() -> void:
 
 
 func _fight_raid() -> void:
-	GameState.progression.pending_raid = true
+	GameState.progression.queue_raid()
 	Routes.go(self, Routes.BATTLE)
 
 

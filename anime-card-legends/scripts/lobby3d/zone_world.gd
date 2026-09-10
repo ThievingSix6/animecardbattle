@@ -38,7 +38,6 @@ var hud: LobbyHUD
 var portal: Portal
 var _stages: Array[Dictionary] = []
 var _current: Dictionary = {}
-var _interact_held := false
 var _menu: TravelMenu
 
 
@@ -73,20 +72,14 @@ func _process(_delta: float) -> void:
 		return
 
 	_update_proximity()
-	_handle_interact()
+
+	# Edge-triggered through the action map, so holding the key cannot
+	# reopen the travel menu on the same frame it closes.
+	if Controls.interact_pressed():
+		_handle_interact()
 
 
-# Edge-triggered: holding ENTER must not reopen the travel menu every
-# frame the moment it closes.
 func _handle_interact() -> void:
-	var pressed := Input.is_key_pressed(KEY_ENTER) or Input.is_key_pressed(KEY_KP_ENTER)
-	if not pressed:
-		_interact_held = false
-		return
-	if _interact_held:
-		return
-	_interact_held = true
-
 	if _current.is_empty():
 		return
 
@@ -98,7 +91,7 @@ func _handle_interact() -> void:
 	if not unlocked:
 		return
 	var floor_number: int = _current["floor"]
-	GameState.progression.pending_floor = floor_number
+	GameState.progression.queue_floor(floor_number)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(Routes.BATTLE)
 
@@ -260,7 +253,7 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 		mat.roughness = 0.7
 		mat.emission_enabled = true
 		mat.emission = tint
-		mat.emission_energy_multiplier = 0.25 + progress * 0.4
+		mat.emission_energy_multiplier = RenderMode.emission(0.25 + progress * 0.4)
 		mesh.material_override = mat
 		body.add_child(mesh)
 
@@ -285,15 +278,16 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 		crown_mat.albedo_color = tint
 		crown_mat.emission_enabled = true
 		crown_mat.emission = tint
-		crown_mat.emission_energy_multiplier = 1.2
+		crown_mat.emission_energy_multiplier = RenderMode.emission(1.2)
 		crown.material_override = crown_mat
 		root.add_child(crown)
 
+	# Crown light, above the landmark rather than inside it.
 	var lamp := OmniLight3D.new()
-	lamp.position.y = height + 1.5
+	lamp.position.y = height + 2.5
 	lamp.light_color = tint
-	lamp.light_energy = 2.0
-	lamp.omni_range = 18.0
+	lamp.light_energy = RenderMode.light(1.6)
+	lamp.omni_range = 20.0
 	root.add_child(lamp)
 
 	# Approach pad marking the interaction radius.
@@ -310,7 +304,7 @@ func _build_stage(stage_index: int, floor_number: int, is_boss: bool, cleared: b
 	pad_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	pad_mat.emission_enabled = true
 	pad_mat.emission = tint
-	pad_mat.emission_energy_multiplier = 0.35
+	pad_mat.emission_energy_multiplier = RenderMode.emission(0.35)
 	pad.material_override = pad_mat
 	root.add_child(pad)
 
@@ -373,14 +367,19 @@ func _build_stage_model(root: Node3D, stage_index: int, is_boss: bool, tint: Col
 	shape.position.y = height * 0.5
 	body.add_child(shape)
 
-	# The stage's state colour still has to read at a distance, so an
-	# uncleared or locked stage is lit rather than repainted - the
-	# imported textures stay intact.
+	# The state colour has to read at a distance, so the landmark is lit
+	# rather than repainted and the imported textures stay intact.
+	#
+	# The light sits OUTSIDE the model, in front of it. An omni light at
+	# the model's centre is millimetres from every surface, which on this
+	# renderer blows the whole thing out to a flat white silhouette -
+	# exactly what a lit landmark looked like before.
 	var wash := OmniLight3D.new()
-	wash.position = Vector3(0.0, height * 0.55, 0.0)
+	var reach := maxf(size.x, size.z) * 0.5
+	wash.position = Vector3(0.0, height * 0.75, reach + height * 0.5)
 	wash.light_color = tint
-	wash.light_energy = 1.4 + progress * 0.8
-	wash.omni_range = maxf(size.x, size.z) + height
+	wash.light_energy = RenderMode.light(0.9 + progress * 0.4)
+	wash.omni_range = reach + height * 2.0
 	root.add_child(wash)
 
 	return height
@@ -449,7 +448,7 @@ func _glow_material(energy: float) -> StandardMaterial3D:
 	mat.albedo_color = tint.lerp(Color.BLACK, 0.4)
 	mat.emission_enabled = true
 	mat.emission = tint
-	mat.emission_energy_multiplier = energy
+	mat.emission_energy_multiplier = RenderMode.emission(energy)
 	return mat
 
 
@@ -632,13 +631,13 @@ func _update_proximity() -> void:
 		return
 
 	if str(closest.get("kind", "stage")) == "portal":
-		hud.show_prompt("Press ENTER to travel")
+		hud.show_prompt("Press %s to travel" % Controls.interact_prompt())
 		return
 
 	var unlocked: bool = closest["unlocked"]
 	var label: String = closest["name"]
 	if unlocked:
-		hud.show_prompt("Press ENTER to fight  " + label)
+		hud.show_prompt("Press %s to fight  %s" % [Controls.interact_prompt(), label])
 	else:
 		hud.show_prompt("Locked — clear the previous stage first")
 
@@ -660,4 +659,4 @@ func _set_pad_active(stage: Dictionary, active: bool) -> void:
 		alpha = 0.5
 		energy = 1.3
 	mat.albedo_color = Color(tint.r, tint.g, tint.b, alpha)
-	mat.emission_energy_multiplier = energy
+	mat.emission_energy_multiplier = RenderMode.emission(energy)

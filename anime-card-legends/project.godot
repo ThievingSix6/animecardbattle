@@ -17,6 +17,7 @@ UITheme="*res://scripts/ui/theme_installer.gd"
 GameState="*res://scripts/game_state.gd"
 Audio="*res://scripts/core/audio.gd"
 Settings="*res://scripts/core/settings.gd"
+Controls="*res://scripts/core/controls.gd"
 
 [display]
 
