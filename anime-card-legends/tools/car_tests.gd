@@ -23,6 +23,15 @@ const FLOOR_SIZE := 4000.0
 const FLOOR_DEPTH := 24.0
 const SETTLE_FRAMES := 90
 
+# The extra geometry Phase 4 needs: a slope, a wall and a ceiling, each
+# far enough from the others that a test cannot accidentally touch two.
+const SLOPE_AT := 600.0
+const SLOPE_DEGREES := 25.0
+const WALL_AT := 1200.0
+const WALL_THICKNESS := 20.0
+const CEILING_AT := 60.0
+const CEILING_Z := -1200.0
+
 var _car: CarBody
 var _cases: Array[Dictionary] = []
 var _index := -1
@@ -196,6 +205,115 @@ func _ready() -> void:
 				return "",
 		},
 		{
+			# Directly exercises the path that used to be a one-way trap,
+			# and that the ceiling fix just rewrote: put the car UNDER
+			# the floor on purpose and check it gets itself out.
+			"name": "digs itself out when placed under the floor",
+			"frames": 120,
+			"before": func():
+				_car.global_transform = Transform3D(
+					Basis.IDENTITY, Vector3(0.0, -FLOOR_DEPTH * 0.5, 0.0))
+				_car.linear_velocity = Vector3.ZERO,
+			"check": func() -> String:
+				if _car.global_position.y < 0.0:
+					return "still at %.2f m, under the floor" % _car.global_position.y
+				if not _car.is_grounded():
+					return "got out but is not on anything"
+				return "",
+		},
+		{
+			"name": "all four wheels report flat floor, none reset-eligible",
+			"frames": SETTLE_FRAMES,
+			"drive": func(_i: CarInput): pass,
+			"check": func() -> String:
+				if _car.touching_wheels() != 4:
+					return "only %d wheels touching" % _car.touching_wheels()
+				if _car.grounded_wheels() != 4:
+					return "only %d wheels drivable" % _car.grounded_wheels()
+				if _car.surface_kind() != WheelContact.Kind.FLOOR:
+					return "called flat ground '%s' (%s)" % [
+						WheelContact.KIND_NAMES[_car.surface_kind()], _kinds()]
+				if _car.reset_eligible_wheels() != 0:
+					return "ordinary floor granted %d reset contacts" % _car.reset_eligible_wheels()
+				return "",
+		},
+		{
+			"name": "springs are loaded but not bottomed out at rest",
+			"frames": SETTLE_FRAMES,
+			"drive": func(_i: CarInput): pass,
+			"check": func() -> String:
+				for wheel in _car.wheels:
+					if wheel.compression <= 0.0:
+						return "wheel %d carries no load" % wheel.index
+					if wheel.compression >= 0.999:
+						return "wheel %d is fully bottomed out" % wheel.index
+				return "",
+		},
+		{
+			"name": "a 25 degree slope is a slope, and still drives",
+			"frames": SETTLE_FRAMES,
+			"before": func():
+				_car.global_transform = Transform3D(
+					Basis(Vector3.BACK, deg_to_rad(SLOPE_DEGREES)),
+					Vector3(SLOPE_AT, CarBody.RIDE_HEIGHT * 2.0, 0.0))
+				_car.linear_velocity = Vector3.ZERO,
+			"check": func() -> String:
+				if _car.grounded_wheels() < 3:
+					return "only %d wheels hold the slope (%s)" % [_car.grounded_wheels(), _kinds()]
+				if _car.surface_kind() != WheelContact.Kind.SLOPE:
+					return "called a %.0f degree slope '%s'" % [
+						SLOPE_DEGREES, WheelContact.KIND_NAMES[_car.surface_kind()]]
+				return "",
+		},
+		{
+			"name": "a wall will not hold a slow car",
+			"frames": 2,
+			"before": func(): _stand_on(
+				Vector3(WALL_AT, 100.0, 0.0), Vector3.LEFT, Vector3.FORWARD, 0.0),
+			"check": func() -> String:
+				if _car.touching_wheels() == 0:
+					return "the wheels never reached the wall"
+				if _car.grounded_wheels() > 0:
+					return "%d wheels gripped a wall at a standstill" % _car.grounded_wheels()
+				return "",
+		},
+		{
+			"name": "a wall holds a fast car",
+			"frames": 2,
+			"before": func(): _stand_on(
+				Vector3(WALL_AT, 100.0, 0.0), Vector3.LEFT, Vector3.FORWARD, 60.0),
+			"check": func() -> String:
+				if _car.grounded_wheels() < 3:
+					return "only %d wheels held the wall (%s)" % [_car.grounded_wheels(), _kinds()]
+				if _car.surface_kind() != WheelContact.Kind.WALL:
+					return "called a wall '%s'" % WheelContact.KIND_NAMES[_car.surface_kind()]
+				return "",
+		},
+		{
+			"name": "a wall grants reset contacts, unlike the floor",
+			"frames": 2,
+			"before": func(): _stand_on(
+				Vector3(WALL_AT, 100.0, 0.0), Vector3.LEFT, Vector3.FORWARD, 60.0),
+			"check": func() -> String:
+				var eligible := _car.reset_eligible_wheels()
+				if eligible < _car.minimum_reset_wheels:
+					return "only %d reset-eligible wheels, need %d" % [
+						eligible, _car.minimum_reset_wheels]
+				return "",
+		},
+		{
+			"name": "a ceiling is a ceiling, and holds a fast car",
+			"frames": 2,
+			"before": func(): _stand_on(
+				Vector3(0.0, CEILING_AT, CEILING_Z), Vector3.DOWN, Vector3.FORWARD, 60.0),
+			"check": func() -> String:
+				if _car.grounded_wheels() < 3:
+					return "only %d wheels held the ceiling (%s)" % [_car.grounded_wheels(), _kinds()]
+				if _car.surface_kind() != WheelContact.Kind.CEILING:
+					return "called a ceiling '%s'" % WheelContact.KIND_NAMES[_car.surface_kind()]
+				return "",
+		},
+		{
 			"name": "an agent drives through the same physics as a player",
 			"frames": 420,
 			"agent": true,
@@ -216,12 +334,51 @@ func _ready() -> void:
 func _build_floor() -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
+	_slab(body, Vector3(0.0, -FLOOR_DEPTH * 0.5, 0.0),
+		Vector3(FLOOR_SIZE, FLOOR_DEPTH, FLOOR_SIZE), Basis.IDENTITY)
+
+	# A slope to drive up. Tilted about Z, so its normal leans in X.
+	_slab(body, Vector3(SLOPE_AT, 0.0, 0.0), Vector3(300.0, FLOOR_DEPTH, 300.0),
+		Basis(Vector3.BACK, deg_to_rad(SLOPE_DEGREES)))
+
+	# A wall, standing clear of everything else. The car drives on its
+	# -X face, which is at WALL_AT.
+	_slab(body, Vector3(WALL_AT + WALL_THICKNESS * 0.5, 200.0, 0.0),
+		Vector3(WALL_THICKNESS, 400.0, 800.0), Basis.IDENTITY)
+
+	# A ceiling, with its underside at CEILING_AT.
+	_slab(body, Vector3(0.0, CEILING_AT + FLOOR_DEPTH * 0.5, CEILING_Z),
+		Vector3(800.0, FLOOR_DEPTH, 800.0), Basis.IDENTITY)
+
+
+func _slab(body: StaticBody3D, at: Vector3, size: Vector3, turn: Basis) -> void:
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(FLOOR_SIZE, FLOOR_DEPTH, FLOOR_SIZE)
+	box.size = size
 	shape.shape = box
-	shape.position.y = -FLOOR_DEPTH * 0.5
+	shape.transform = Transform3D(turn, at)
 	body.add_child(shape)
+
+
+# Puts the car on a surface: `up` is the surface normal, `facing` the way
+# the nose should point along it. Used to test walls and ceilings, where
+# the car's own up is nothing like the world's.
+func _stand_on(contact: Vector3, up: Vector3, facing: Vector3, along: float) -> void:
+	var y := up.normalized()
+	var z := -facing.normalized()
+	var x := y.cross(z).normalized()
+	z = x.cross(y).normalized()
+
+	_car.global_transform = Transform3D(Basis(x, y, z), contact + y * CarBody.RIDE_HEIGHT)
+	_car.linear_velocity = -z * along
+	_car.angular_velocity = Vector3.ZERO
+
+
+func _kinds() -> String:
+	var out: Array[String] = []
+	for wheel in _car.wheels:
+		out.append(wheel.kind_name())
+	return ", ".join(out)
 
 
 func _reset() -> void:

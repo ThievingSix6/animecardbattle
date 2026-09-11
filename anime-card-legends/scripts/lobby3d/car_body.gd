@@ -71,6 +71,9 @@ const PROBE_REACH := RIDE_HEIGHT * 4.0
 # not a ceiling it is buried under.
 const SURFACE_SLACK := RIDE_HEIGHT * 0.25
 
+# The four corners, in the order they are built and indexed.
+const WHEEL_NAMES: Array[String] = ["FrontLeft", "FrontRight", "RearLeft", "RearRight"]
+
 
 # --- Everything else is tunable ---------------------------------------
 #
@@ -119,6 +122,24 @@ const SURFACE_SLACK := RIDE_HEIGHT * 0.25
 # they hold it at RIDE_HEIGHT whatever the car masses.
 @export var spring_strength := 20.0
 @export var damper_strength := 40.0
+
+@export_group("Wheel contact")
+# Where one surface stops being another. A contact within slope_min of
+# world up is flat floor; out to floor_max it is a slope and still drives
+# normally; past ceiling_min it is a ceiling; everything between is wall.
+@export var slope_max_degrees := 12.0
+@export var floor_max_degrees := 50.0
+@export var ceiling_min_degrees := 130.0
+# How fast the car has to be going for a wall or a ceiling to hold it.
+# Below this a wall is something it touches, not something it drives on -
+# which is what stops a car parking halfway up one.
+@export var wall_stick_speed_uu := 500.0
+# Ordinary floor does not grant flip resets. Turn this on to test the
+# reset machinery without having to find a wall first.
+@export var reset_allows_floor := false
+# How many wheels have to make a valid contact for a reset. Rocket
+# League wants all four; three is the usual forgiving setting.
+@export var minimum_reset_wheels := 3
 
 @export_group("Air control")
 # Rocket League's angular accelerations, in rad/s^2, and the damping
@@ -181,6 +202,12 @@ var input := CarInput.new()
 var _shell: Node3D
 var _rays: Array[RayCast3D] = []
 var _probe: RayCast3D
+
+# One per wheel, in the order _build_suspension() creates them: front
+# left, front right, rear left, rear right. Rebuilt every physics frame
+# and read by everything that needs to know what the car is touching.
+var wheels: Array[WheelContact] = []
+
 var _grounded := false
 var _ground_normal := Vector3.UP
 
@@ -380,6 +407,7 @@ func _build_placeholder() -> void:
 # from inside a collider, and the probe below un-sticks the car outright
 # if it still manages to get under the world.
 func _build_suspension() -> void:
+	# -Z is the car's nose, so the first two corners are the front pair.
 	var half_w := CAR_WIDTH * 0.42
 	var half_l := CAR_LENGTH * 0.36
 	var corners: Array[Vector3] = [
@@ -389,9 +417,10 @@ func _build_suspension() -> void:
 		Vector3(half_w, 0.0, half_l),
 	]
 
-	for corner in corners:
+	for i in corners.size():
 		var ray := RayCast3D.new()
-		ray.position = corner + Vector3(0.0, RAY_LIFT, 0.0)
+		ray.name = WHEEL_NAMES[i]
+		ray.position = corners[i] + Vector3(0.0, RAY_LIFT, 0.0)
 		ray.target_position = Vector3(0.0, -RAY_LENGTH, 0.0)
 		ray.enabled = true
 		ray.exclude_parent = true
@@ -401,11 +430,19 @@ func _build_suspension() -> void:
 		add_child(ray)
 		_rays.append(ray)
 
+		var wheel := WheelContact.new()
+		wheel.index = i
+		wheels.append(wheel)
+
 	_probe = RayCast3D.new()
-	_probe.position = Vector3(0.0, PROBE_LIFT, 0.0)
+	_probe.name = "BuriedProbe"
+	# top_level: it looks straight down in WORLD space, so it still finds
+	# the ground when the car is upside down on a ceiling. Parented
+	# normally it turned with the car and pointed at the sky.
+	_probe.top_level = true
 	_probe.target_position = Vector3(0.0, -(PROBE_LIFT + PROBE_REACH), 0.0)
 	_probe.enabled = true
-	_probe.exclude_parent = true
+	_probe.add_exception(self)
 	add_child(_probe)
 
 
@@ -548,21 +585,148 @@ func _physics_process(delta: float) -> void:
 # --- Ground ---------------------------------------------------------
 
 func _read_ground() -> void:
-	_unbury()
+	_read_wheels()
+	# Only after the wheels are known - being under the world is
+	# something they report, and unburying moves the car, so what they
+	# report has to be taken again afterwards.
+	if _unbury():
+		_read_wheels()
 
-	_grounded = false
-	var normal := Vector3.ZERO
-	var hits := 0
 
-	for ray in _rays:
+func _read_wheels() -> void:
+	var slope_min := deg_to_rad(slope_max_degrees)
+	var floor_max := deg_to_rad(floor_max_degrees)
+	var ceiling_min := deg_to_rad(ceiling_min_degrees)
+	var fast_enough := speed() >= wall_stick_speed_uu * UU
+
+	var up := global_transform.basis.y
+	var normal_sum := Vector3.ZERO
+	var driving := 0
+
+	for i in wheels.size():
+		var wheel: WheelContact = wheels[i]
+		var ray: RayCast3D = _rays[i]
+		wheel.clear()
+
+		# Cast NOW, at where the car actually is.
+		#
+		# A RayCast3D is refreshed by the physics server during its step,
+		# so reading one from _physics_process gives last step's answer at
+		# last step's position. That is a frame of lag in normal driving
+		# and a wrong answer outright the moment anything moves the car
+		# between steps - a kickoff placement, a goal reset, _unbury().
+		# Phase 9's flip resets hang off these contacts, and a reset
+		# granted from a stale hit is a reset granted off thin air.
+		ray.force_raycast_update()
 		if not ray.is_colliding():
 			continue
-		hits += 1
-		normal += ray.get_collision_normal()
 
-	if hits > 0:
-		_grounded = true
-		_ground_normal = (normal / float(hits)).normalized()
+		wheel.grounded = true
+		wheel.position = ray.get_collision_point()
+		wheel.collider = ray.get_collider()
+		wheel.distance = ray.global_position.distance_to(wheel.position)
+
+		# A ray that started INSIDE a collider reports a zero-length
+		# normal, because there is no face to take one from. Standing the
+		# car's own up in for it keeps the spring pushing the right way
+		# while _unbury() gets it out.
+		# A ray that started INSIDE a collider reports a zero-length
+		# normal, because there is no face to take one from. That is also
+		# the one reliable way to tell that a wheel is under the world
+		# rather than on it, so it is recorded rather than just patched
+		# over. The car's own up stands in so the spring still pushes the
+		# right way while _unbury() gets it out.
+		var surface := ray.get_collision_normal()
+		wheel.inside_surface = surface.length_squared() <= 0.0001
+		wheel.normal = up if wheel.inside_surface else surface.normalized()
+
+		# Measured from the ray's own start, which sits RAY_LIFT above
+		# the body origin - so REST_LENGTH, not RIDE_HEIGHT, is where the
+		# spring is neither compressed nor extended.
+		wheel.compression = clampf((REST_LENGTH - wheel.distance) / RIDE_HEIGHT, 0.0, 1.0)
+
+		var offset := wheel.position - global_position
+		wheel.point_velocity = linear_velocity + angular_velocity.cross(offset)
+		wheel.surface_velocity = _velocity_of(wheel.collider, wheel.position)
+		wheel.closing_speed = (wheel.point_velocity - wheel.surface_velocity).dot(up)
+
+		wheel.surface_angle = wheel.normal.angle_to(Vector3.UP)
+		wheel.kind = WheelContact.classify(wheel.normal, floor_max, ceiling_min, slope_min)
+
+		# Floor and slope always hold. A wall or a ceiling only holds
+		# while the car is moving fast enough to stay on it.
+		var flat := wheel.kind == WheelContact.Kind.FLOOR or wheel.kind == WheelContact.Kind.SLOPE
+		wheel.drivable = flat or fast_enough
+		# Ordinary floor never grants a reset; everything else can.
+		wheel.reset_eligible = (not flat) or reset_allows_floor
+
+		if wheel.drivable:
+			driving += 1
+			normal_sum += wheel.normal
+
+	_grounded = driving > 0
+	if _grounded:
+		_ground_normal = (normal_sum / float(driving)).normalized()
+
+
+# How fast the thing a wheel is resting on is itself moving, at the point
+# of contact. The arena is static and returns zero; the ball is not, and
+# a flip reset taken off a ball travelling at 40 m/s has to measure the
+# closing speed against the BALL rather than against the world.
+func _velocity_of(body: Object, at: Vector3) -> Vector3:
+	if body is RigidBody3D:
+		var rigid: RigidBody3D = body
+		return rigid.linear_velocity + rigid.angular_velocity.cross(at - rigid.global_position)
+	if body is CharacterBody3D:
+		return (body as CharacterBody3D).velocity
+	return Vector3.ZERO
+
+
+# --- What the car is touching, for anything that needs to ask ----------
+
+func grounded_wheels() -> int:
+	var count := 0
+	for wheel in wheels:
+		if wheel.drivable:
+			count += 1
+	return count
+
+
+func touching_wheels() -> int:
+	var count := 0
+	for wheel in wheels:
+		if wheel.grounded:
+			count += 1
+	return count
+
+
+func reset_eligible_wheels() -> int:
+	var count := 0
+	for wheel in wheels:
+		if wheel.grounded and wheel.reset_eligible:
+			count += 1
+	return count
+
+
+func ground_normal() -> Vector3:
+	return _ground_normal
+
+
+# The kind of surface the car is mostly on, for the HUD and the debug
+# overlay. Whichever kind has the most wheels on it wins.
+func surface_kind() -> int:
+	var tally := [0, 0, 0, 0, 0]
+	for wheel in wheels:
+		if wheel.grounded:
+			tally[wheel.kind] += 1
+
+	var best := WheelContact.Kind.NONE
+	var most := 0
+	for i in tally.size():
+		if int(tally[i]) > most:
+			most = int(tally[i])
+			best = i
+	return best
 
 
 # The last line of defence against driving into the floor.
@@ -575,13 +739,23 @@ func _read_ground() -> void:
 #
 # Checked every physics frame, so the car is only ever a frame's worth of
 # fall under the surface when this catches it.
-func _unbury() -> void:
+# Returns true if the car was moved.
+func _unbury() -> bool:
+	if not _buried():
+		return false
+
+	# Cast straight DOWN IN WORLD SPACE from above the roof. The probe is
+	# top_level, so it keeps pointing down however the car is oriented -
+	# as a child it turned with the car, which on a ceiling meant it
+	# pointed at the sky.
+	_probe.global_transform = Transform3D(Basis.IDENTITY, global_position + Vector3.UP * PROBE_LIFT)
+	_probe.force_raycast_update()
 	if not _probe.is_colliding():
-		return
+		return false
 
 	var surface := _probe.get_collision_point().y
 	if surface <= global_position.y + SURFACE_SLACK:
-		return
+		return false
 
 	var lifted := global_transform
 	lifted.origin.y = surface + RIDE_HEIGHT
@@ -589,34 +763,43 @@ func _unbury() -> void:
 
 	if linear_velocity.y < 0.0:
 		linear_velocity.y = 0.0
+	return true
+
+
+# Under the world, as opposed to legitimately upside down under a
+# ceiling. The test used to be "the probe found a surface above the car",
+# which is TRUE OF EVERY CEILING - so driving on one teleported the car
+# up through it. A wheel whose ray began inside a collider is the
+# unambiguous version: you cannot be inside the floor and on it.
+func _buried() -> bool:
+	for wheel in wheels:
+		if wheel.inside_surface:
+			return true
+	# Nothing under any wheel at all is the other way it happens: the car
+	# tunnelled clean through in one step and the rays now start below
+	# the collider entirely.
+	return touching_wheels() == 0
 
 
 # One spring per corner, pushing along the shell's own up so the car
 # banks with a slope rather than fighting it.
 func _apply_suspension() -> void:
 	var up := global_transform.basis.y
+	# A quarter of the car's weight per wheel. Gravity is already scaled,
+	# so this holds the car at RIDE_HEIGHT whatever it masses.
+	var weight := mass * 9.8 * gravity_scale * 0.25
+	var share := mass * 0.25
 
-	for ray in _rays:
-		if not ray.is_colliding():
+	for wheel in wheels:
+		# DRIVABLE, not merely grounded. A wall the car is too slow to
+		# hold has no spring, so it slides off instead of hovering
+		# beside it - which is the behaviour that makes a wall a wall.
+		if not wheel.drivable:
 			continue
 
-		var contact := ray.get_collision_point()
-		var offset := contact - global_position
-		# Measured from the ray's own start, which sits RAY_LIFT above
-		# the body origin - so REST_LENGTH, not RIDE_HEIGHT, is where the
-		# spring is neither compressed nor extended.
-		var distance := ray.global_position.distance_to(contact)
-		var compression := clampf((REST_LENGTH - distance) / RIDE_HEIGHT, 0.0, 1.0)
-
-		var point_velocity := linear_velocity + angular_velocity.cross(offset)
-		var closing := point_velocity.dot(up)
-
-		# A quarter of the car's weight per wheel, times the spring
-		# response. Gravity is already scaled, so this holds it up at
-		# exactly RIDE_HEIGHT whatever the scale.
-		var weight := mass * 9.8 * gravity_scale * 0.25
-		var force := weight * (compression * spring_strength) - closing * damper_strength * mass * 0.25
-		apply_force(up * maxf(force, 0.0), offset)
+		var force := weight * (wheel.compression * spring_strength) \
+			- wheel.closing_speed * damper_strength * share
+		apply_force(up * maxf(force, 0.0), wheel.position - global_position)
 
 
 func _drive(throttle: float, boosting: bool) -> void:
