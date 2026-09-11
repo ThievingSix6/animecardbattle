@@ -123,7 +123,8 @@ func _build_mountain_models(variants: Array[String], placements: Array[Dictionar
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
+		var info := Models.first_mesh_info(sample)
+		var mesh: Mesh = info["mesh"]
 		var material := Models.first_material(sample, Models.PROP_FOLDER + name)
 		sample.queue_free()
 		if mesh == null:
@@ -137,10 +138,7 @@ func _build_mountain_models(variants: Array[String], placements: Array[Dictionar
 		if mine.is_empty():
 			continue
 
-		var fit := Models.mesh_fit_box(mesh)
-		var per_width := float(fit["per_width"])
-		var per_height := float(fit["per_height"])
-		var base_lift := float(fit["base"])
+		var fit := Models.mesh_fit_box(info, name)
 
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -153,9 +151,7 @@ func _build_mountain_models(variants: Array[String], placements: Array[Dictionar
 			var width := float(spot["width"]) * 2.0
 			var height := float(spot["height"])
 			var spin := float(spot["spin"])
-			var orientation := Basis(Vector3.UP, spin).scaled(
-				Vector3(per_width * width, per_height * height, per_width * width))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+			multi.set_instance_transform(i, Models.box_transform(fit, at, spin, width, height))
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi

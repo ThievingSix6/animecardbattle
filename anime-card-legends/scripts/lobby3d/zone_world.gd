@@ -358,8 +358,9 @@ func _build_stage_model(root: Node3D, stage_index: int, is_boss: bool, tint: Col
 	Models.fit_height(model, height)
 
 	# A little rotation per stage so seven copies of one model do not
-	# read as seven copies of one model.
-	model.rotation.y = float(stage_index) * 0.7
+	# read as seven copies of one model. spin() turns the model without
+	# rebuilding its basis, which would discard the import transform.
+	Models.spin(model, float(stage_index) * 0.7)
 
 	# Collision matched to whatever was imported, so the landmark is
 	# solid without the model needing collision shapes of its own.

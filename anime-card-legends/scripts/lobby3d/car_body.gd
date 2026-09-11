@@ -237,10 +237,15 @@ func _build_shell() -> void:
 
 	var model := Models.spawn_prop("car")
 	if model != null:
-		# Rotated FIRST, then measured. Fitting before rotating meant
-		# the seat height was computed for the wrong axis, so a turned
-		# model ended up half-buried in the road.
-		model.rotation = Vector3(MODEL_PITCH, MODEL_YAW, MODEL_ROLL)
+		# Turned FIRST, then measured. Fitting before turning meant the
+		# seat height was computed for the wrong axis, so a turned model
+		# ended up half-buried in the road.
+		#
+		# spin(), not `model.rotation =`: car.glb carries its Y-up
+		# conversion and a x100 unit conversion on its own root node, and
+		# assigning euler angles over that wiped both out.
+		Models.spin(model, MODEL_YAW)
+		Models.tilt(model, MODEL_PITCH, MODEL_ROLL)
 
 		var holder := Node3D.new()
 		_shell.add_child(holder)

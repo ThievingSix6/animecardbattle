@@ -587,8 +587,10 @@ func _build_skyline() -> void:
 	var mesh: Mesh = null
 	var material: Material = null
 
+	var info := {"mesh": null, "correction": Transform3D.IDENTITY}
 	if model != null:
-		mesh = Models.first_mesh(model)
+		info = Models.first_mesh_info(model)
+		mesh = info["mesh"]
 		material = Models.first_material(model, Models.PROP_FOLDER + "building")
 		model.queue_free()
 
@@ -597,6 +599,7 @@ func _build_skyline() -> void:
 		var box := BoxMesh.new()
 		box.size = Vector3(1.0, 1.0, 1.0)
 		mesh = box
+		info = {"mesh": mesh, "correction": Transform3D.IDENTITY}
 
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -608,10 +611,7 @@ func _build_skyline() -> void:
 	# its own height SEPARATELY. Scaling uniformly is what made the old
 	# district a wall of giants: asking for a 50 m tower also gave it a
 	# 50 m footprint, so it swallowed its lot and both its streets.
-	var fit := Models.mesh_fit_box(mesh)
-	var per_width := float(fit["per_width"])
-	var per_height := float(fit["per_height"])
-	var base_lift := float(fit["base"])
+	var fit := Models.mesh_fit_box(info, "building")
 
 	var body := StaticBody3D.new()
 	add_child(body)
@@ -625,10 +625,7 @@ func _build_skyline() -> void:
 		var width := float(spot["width"])
 		var spin := float(spot["spin"])
 
-		var orientation := Basis(Vector3.UP, spin).scaled(
-			Vector3(per_width * width, per_height * height, per_width * width))
-		var origin := at + Vector3(0.0, base_lift * height, 0.0)
-		multi.set_instance_transform(i, Transform3D(orientation, origin))
+		multi.set_instance_transform(i, Models.box_transform(fit, at, spin, width, height))
 
 		if fallback:
 			var shade := Color("#161b28").lerp(Color("#232a3d"), _rng.randf())
@@ -677,7 +674,8 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
+		var info := Models.first_mesh_info(sample)
+		var mesh: Mesh = info["mesh"]
 		var material := Models.first_material(sample, Models.PROP_FOLDER + model_name)
 		sample.queue_free()
 		if mesh == null:
@@ -690,10 +688,7 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 		if mine.is_empty():
 			continue
 
-		var fit := Models.mesh_fit_box(mesh)
-		var per_width := float(fit["per_width"])
-		var per_height := float(fit["per_height"])
-		var base_lift := float(fit["base"])
+		var fit := Models.mesh_fit_box(info, model_name)
 
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -707,9 +702,7 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 			var width := float(spot["width"])
 			var spin := float(spot["spin"])
 
-			var orientation := Basis(Vector3.UP, spin).scaled(
-				Vector3(per_width * width, per_height * height, per_width * width))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+			multi.set_instance_transform(i, Models.box_transform(fit, at, spin, width, height))
 
 			var shape := CollisionShape3D.new()
 			var box_shape := BoxShape3D.new()
@@ -1255,7 +1248,8 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
+		var info := Models.first_mesh_info(sample)
+		var mesh: Mesh = info["mesh"]
 		var material := Models.first_material(sample, Models.PROP_FOLDER + prop_name)
 		sample.queue_free()
 		if mesh == null:
@@ -1279,16 +1273,11 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 			var height := float(spot["height"])
 			var spin := float(spot["spin"])
 
-			# Uniform, and stood upright if the model came in Z-up.
+			# Uniform, and carrying the model's own Y-up correction.
 			# Scaling a bench's width and height independently to hit a
-			# target height is what turned these into thin slabs on
-			# their sides.
-			var fit := Models.mesh_fit_upright(mesh, prop_name, height)
-			var scale := float(fit["scale"])
-			var upright: Vector3 = fit["rotation"]
-			var frame := Basis.from_euler(upright)
-			var orientation := Basis(Vector3.UP, spin) * frame.scaled(Vector3(scale, scale, scale))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * float(fit["base"])))
+			# target height is what turned these into thin slabs.
+			var fit := Models.mesh_fit_upright(info, prop_name, height)
+			multi.set_instance_transform(i, Models.upright_transform(fit, at, spin))
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi

@@ -127,7 +127,7 @@ func _build_imported_body() -> bool:
 
 	_body.add_child(model)
 	Models.fit_height(model, BODY_HEIGHT)
-	model.rotation.y = MODEL_YAW
+	Models.spin(model, MODEL_YAW)
 
 	_anim = Models.find_animation_player(model)
 	if _anim != null:

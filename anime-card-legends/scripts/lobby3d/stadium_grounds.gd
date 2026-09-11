@@ -201,7 +201,8 @@ func _build_clusters(names: Array[String], placements: Array[Dictionary]) -> voi
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
+		var info := Models.first_mesh_info(sample)
+		var mesh: Mesh = info["mesh"]
 		var material := Models.first_material(sample, Models.PROP_FOLDER + model_name)
 		sample.queue_free()
 		if mesh == null:
@@ -225,12 +226,8 @@ func _build_clusters(names: Array[String], placements: Array[Dictionary]) -> voi
 			var height := float(spot["height"])
 			var spin := float(spot["spin"])
 
-			var fit := Models.mesh_fit_upright(mesh, model_name, height)
-			var scale := float(fit["scale"])
-			var upright: Vector3 = fit["rotation"]
-			var frame := Basis.from_euler(upright)
-			var orientation := Basis(Vector3.UP, spin) * frame.scaled(Vector3(scale, scale, scale))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * float(fit["base"])))
+			var fit := Models.mesh_fit_upright(info, model_name, height)
+			multi.set_instance_transform(i, Models.upright_transform(fit, at, spin))
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
