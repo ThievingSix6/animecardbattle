@@ -362,9 +362,16 @@ func unequip_slot(slot: String) -> void:
 # it is about to face. Each step returns a copy, so the card in the
 # collection is never touched.
 func get_battle_team(against: String = "") -> Array[CardData]:
+	var roster := collection.get_team()
 	var team: Array[CardData] = []
-	for card in collection.get_team():
-		team.append(Grudges.apply_to(equipment.apply_to(card), against))
+	for card in roster:
+		# The stored card, plus what it is wearing, plus who it is about
+		# to face, plus how alone it is. Every step returns a copy, so
+		# the card in the collection is never touched.
+		var ready := equipment.apply_to(card)
+		ready = Grudges.apply_to(ready, against)
+		ready = Outnumbered.apply_to(ready, roster.size())
+		team.append(ready)
 	return team
 
 

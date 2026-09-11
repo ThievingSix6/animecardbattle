@@ -138,6 +138,7 @@ func _start() -> void:
 	var context := _ledger_context()
 	sim.setup(GameState.get_battle_team(str(context["boss"])), opposition)
 	_announce_grudges(str(context["boss"]))
+	_announce_outnumbered()
 
 	if mode == "gauntlet":
 		_apply_carried_wounds()
@@ -167,6 +168,17 @@ func _start() -> void:
 
 	await get_tree().create_timer(0.7).timeout
 	_run()
+
+
+# A short bench is a build, so the fight says so out loud.
+func _announce_outnumbered() -> void:
+	var size := GameState.collection.get_team().size()
+	if not Outnumbered.is_active(size):
+		return
+	_write("[color=#%s]%s — %s[/color]" % [
+		Design.ACCENT.to_html(false),
+		Outnumbered.lineup_name(size).to_upper(),
+		Outnumbered.summary(size)])
 
 
 # The payoff moment. A grudge that fires silently is a stat change; a

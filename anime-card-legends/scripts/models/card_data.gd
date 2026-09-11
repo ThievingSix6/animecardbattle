@@ -66,6 +66,15 @@ extends Resource
 @export var obtained: bool = false
 @export var locked: bool = false
 
+@export_category("Battle")
+# Energy this card walks into a fight already holding. Set by
+# Outnumbered on the per-fight COPY of the card and nowhere else.
+#
+# Deliberately absent from SaveManager.CARD_FIELDS: it is derived from
+# the lineup you happen to have brought, so persisting it would bake one
+# fight's circumstances into the card forever.
+@export var starting_energy: int = 0
+
 @export_category("Record")
 # What this card has lived through. See scripts/core/ledger.gd - it is a
 # private history rather than a stat, it makes the card no stronger on

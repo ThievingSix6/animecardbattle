@@ -53,6 +53,9 @@ func _init(card: CardData, which_side: String, slot: int) -> void:
 	index = slot
 	max_hp = card.health
 	hp = card.health
+	# Normally zero. Outnumbered hands a short-handed card some of its
+	# ultimate up front, which is the qualitative half of that trade.
+	energy = clampi(card.starting_energy, 0, Config.ENERGY_MAX)
 
 
 func id() -> String:
