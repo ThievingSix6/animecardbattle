@@ -67,16 +67,23 @@ const BLUE := Color("#3b82f6")
 const ORANGE := Color("#f5a623")
 
 var car: CarBody
-var bot: CarBody
 var ball: ArenaBall
 var camera: CarCamera
 var hud: ArenaHUD
+var menu: ArenaSettings
+
+# Everyone on the pitch, the player included. In 1v1 that is the player
+# and one bot; in 2v2 it is the player, a teammate and two opponents.
+var blue_team: Array[CarBody] = []
+var orange_team: Array[CarBody] = []
+
+var _brains: Array[ArenaBot] = []
+var _team_size := 1
 
 var _score := {"blue": 0, "orange": 0}
 var _clock := MATCH_SECONDS
 var _kickoff := KICKOFF_PAUSE
 var _over := false
-var _bot_brain: ArenaBot
 
 var _crowd: AudioStreamPlayer
 var _crowd_quiet := 0.0
@@ -331,26 +338,48 @@ func _on_goal(entered: Node, scorer: String) -> void:
 
 # --- Actors -------------------------------------------------------------
 
+# Blue defends +Z and attacks -Z; orange is the other way round. The
+# player is always blue, and always the first car on the team, so the
+# kickoff spots line up the same way in 1v1 and 2v2.
 func _build_actors() -> void:
 	ball = ArenaBall.create()
 	ball.hit.connect(_on_ball_hit)
 	add_child(ball)
 
-	car = CarBody.create()
-	add_child(car)
-	car.take_control()
+	_team_size = clampi(Settings.team_size, 1, 2)
 
-	bot = CarBody.create()
-	add_child(bot)
+	for i in _team_size:
+		var blue := CarBody.create()
+		add_child(blue)
+		blue_team.append(blue)
+		# The first blue car is the player's; anything after it is a
+		# teammate, and gets a brain like the opposition.
+		if i == 0:
+			car = blue
+			car.take_control()
+		else:
+			_add_brain(blue, HALF_LENGTH, i)
 
-	_bot_brain = ArenaBot.new()
-	_bot_brain.setup(bot, ball, HALF_LENGTH)
-	add_child(_bot_brain)
+		var orange := CarBody.create()
+		add_child(orange)
+		orange_team.append(orange)
+		_add_brain(orange, -HALF_LENGTH, i)
 
 	camera = CarCamera.create(car)
+	camera.ball = ball
 	add_child(camera)
 	camera.activate()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _add_brain(who: CarBody, own_goal_z: float, index: int) -> void:
+	var brain := ArenaBot.new()
+	brain.setup(who, ball, HALF_LENGTH, own_goal_z)
+	# One car challenges, the other covers, so a pair does not both leave
+	# the net at once.
+	brain.role = ArenaBot.ROLE_FIRST if index == 0 else ArenaBot.ROLE_SECOND
+	add_child(brain)
+	_brains.append(brain)
 
 
 func _build_hud() -> void:
@@ -361,36 +390,67 @@ func _build_hud() -> void:
 	_crowd = Audio.voice("soccar_crowd")
 	_hold_crowd()
 
+	menu = ArenaSettings.new()
+	menu.leave_requested.connect(_leave)
+	menu.restart_requested.connect(_restart)
+	add_child(menu)
+
 
 # --- Match flow ---------------------------------------------------------
+
+# RL's kickoff spots: dead centre in a 1v1, and the two diagonals in a
+# 2v2. Every car faces the middle.
+const KICKOFF_SPREAD := 0.29    # across the pitch, as a fraction of half its width
+const KICKOFF_BACK := 0.62      # down the pitch, as a fraction of half its length
+const KICKOFF_BACK_WIDE := 0.72
+
+
+func _kickoff_spots(count: int) -> Array[Vector3]:
+	if count < 2:
+		return [Vector3(0.0, 0.0, HALF_LENGTH * KICKOFF_BACK)]
+	return [
+		Vector3(-HALF_WIDTH * KICKOFF_SPREAD, 0.0, HALF_LENGTH * KICKOFF_BACK_WIDE),
+		Vector3(HALF_WIDTH * KICKOFF_SPREAD, 0.0, HALF_LENGTH * KICKOFF_BACK_WIDE),
+	]
+
 
 func _kick_off() -> void:
 	_kickoff = KICKOFF_PAUSE
 	ball.reset_to(Vector3(0, ArenaBall.RADIUS * 1.2, 0))
 	Audio.play("soccar_lets_go")
 
-	car.global_position = Vector3(0, car.ride_height() + 0.5, HALF_LENGTH * 0.62)
-	car.linear_velocity = Vector3.ZERO
-	car.angular_velocity = Vector3.ZERO
-	car.global_rotation = Vector3(0, 0, 0)
-	car.boost = CarBody.BOOST_MAX
+	var spots := _kickoff_spots(_team_size)
+	for i in blue_team.size():
+		_place(blue_team[i], spots[i % spots.size()], 1.0)
+	for i in orange_team.size():
+		_place(orange_team[i], spots[i % spots.size()], -1.0)
 
-	bot.global_position = Vector3(0, bot.ride_height() + 0.5, -HALF_LENGTH * 0.62)
-	bot.linear_velocity = Vector3.ZERO
-	bot.angular_velocity = Vector3.ZERO
-	bot.global_rotation = Vector3(0, PI, 0)
-	bot.boost = CarBody.BOOST_MAX
+
+# `side` is +1 for blue, which defends +Z, and -1 for orange. Mirroring
+# the spot rather than listing both sets keeps the two ends identical.
+func _place(who: CarBody, spot: Vector3, side: float) -> void:
+	who.global_position = Vector3(
+		spot.x * side, who.ride_height() + 0.5, spot.z * side)
+	who.linear_velocity = Vector3.ZERO
+	who.angular_velocity = Vector3.ZERO
+	var facing := 0.0 if side > 0.0 else PI
+	who.global_rotation = Vector3(0.0, facing, 0.0)
+	who.boost = CarBody.BOOST_MAX
 
 
 func _process(delta: float) -> void:
 	if _over or car == null:
 		return
 
+	if menu != null and menu.is_open():
+		return
+
 	if _kickoff > 0.0:
 		_kickoff -= delta
 		var live := _kickoff <= 0.0
 		car.driver_seated = live
-		_bot_brain.active = live
+		for brain in _brains:
+			brain.active = live
 		if hud != null:
 			hud.announce("" if live else "KICKOFF")
 
@@ -413,14 +473,17 @@ func _process(delta: float) -> void:
 		_finish()
 		return
 
-	if Controls.cancel_pressed():
-		_leave()
+	# Escape opens the menu rather than walking straight out of a match
+	# you are in the middle of. Leaving is one of its buttons.
+	if Controls.cancel_pressed() and menu != null:
+		menu.open()
 
 
 func _finish() -> void:
 	_over = true
 	car.driver_seated = false
-	_bot_brain.active = false
+	for brain in _brains:
+		brain.active = false
 
 	var blue := int(_score["blue"])
 	var orange := int(_score["orange"])
@@ -510,6 +573,14 @@ func _play_crowd(key: String, loudness: float) -> void:
 	_crowd.stream = stream
 	_crowd.volume_db = linear_to_db(maxf(0.0001, loudness * Settings.sfx_volume))
 	_crowd.play()
+
+
+# Changing the team size mid-match means a different number of cars on
+# the pitch, so the match starts again rather than trying to grow a team
+# out from under the player.
+func _restart() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().reload_current_scene()
 
 
 func _leave() -> void:

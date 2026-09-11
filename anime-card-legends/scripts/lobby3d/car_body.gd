@@ -485,7 +485,7 @@ func _physics_process(delta: float) -> void:
 		_grip(drifting, delta)
 	else:
 		_airborne_for += delta
-		_air_control(pitch, steer, drifting, delta)
+		_air_control(pitch, steer, drifting, Controls.air_roll() if not ai_driven else 0.0, delta)
 
 	_apply_boost(boosting, delta)
 	_handle_jump(delta)
@@ -634,7 +634,13 @@ func _grip(drifting: bool, delta: float) -> void:
 
 # Angular acceleration applied directly, the way Rocket League does it -
 # torque divided by an inertia tensor we would only have to guess at.
-func _air_control(pitch: float, yaw_or_roll: float, rolling: bool, delta: float) -> void:
+# `directional` is Rocket League's Air Roll Left / Air Roll Right: hold it
+# and the car turns that way by itself, at full rate, while the stick
+# carries on pitching and yawing underneath. That is what separates it
+# from the free air roll on the powerslide button, where the stick has to
+# be given over to the roll and cannot do anything else.
+func _air_control(pitch: float, yaw_or_roll: float, rolling: bool,
+		directional: float, delta: float) -> void:
 	if _flip_lock > 0.0:
 		return
 
@@ -646,7 +652,10 @@ func _air_control(pitch: float, yaw_or_roll: float, rolling: bool, delta: float)
 
 	var yaw := 0.0
 	var roll := 0.0
-	if rolling:
+	if not is_zero_approx(directional):
+		roll = directional
+		yaw = yaw_or_roll
+	elif rolling:
 		roll = yaw_or_roll
 	else:
 		yaw = yaw_or_roll

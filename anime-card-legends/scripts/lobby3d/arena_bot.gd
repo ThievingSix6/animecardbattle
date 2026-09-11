@@ -22,19 +22,43 @@ const BOOST_DISTANCE := 4.0       # multiples of the car's length
 const FLIP_DISTANCE := 1.6
 const FLIP_COOLDOWN := 1.2
 
+# --- Teammates ---------------------------------------------------------
+#
+# In 2v2 both bots on a side would otherwise drive at the ball together,
+# arrive together, and leave an empty net behind them. So each bot is
+# given a ROLE.
+#
+# The first man challenges the ball. The second holds back between the
+# ball and its own goal and only commits once the ball is on its half -
+# which is roughly what "rotating" means, without a rotation system to
+# maintain.
+const ROLE_FIRST := 0
+const ROLE_SECOND := 1
+
+# How far back the second man sits, as a fraction of the half-pitch.
+const COVER_DEPTH := 0.55
+# It stops covering and joins in once the ball is this far into its own
+# half, measured the same way.
+const COMMIT_DEPTH := 0.35
+
 var active := false
+var role := ROLE_FIRST
 
 var _car: CarBody
 var _ball: ArenaBall
 var _own_goal_z := 0.0
+var _half_length := 0.0
 var _flip_timer := 0.0
 
 
-func setup(car: CarBody, ball: ArenaBall, half_length: float) -> void:
+# `own_goal_z` is the end it defends: negative for the far end, positive
+# for the near one, so a bot can be put on either team.
+func setup(car: CarBody, ball: ArenaBall, half_length: float, own_goal_z: float = 0.0) -> void:
 	_car = car
 	_ball = ball
-	# It defends the far end, which is where the arena spawns it.
-	_own_goal_z = -half_length
+	_half_length = absf(half_length)
+	# Defaults to the far end, which is where a 1v1 spawns it.
+	_own_goal_z = own_goal_z if not is_zero_approx(own_goal_z) else -_half_length
 
 
 func _physics_process(delta: float) -> void:
@@ -47,7 +71,7 @@ func _physics_process(delta: float) -> void:
 		_car.drive_inputs(0.0, 0.0, false, false, false)
 		return
 
-	var target := _aim_point()
+	var target := _cover_point() if _covering() else _aim_point()
 	var to_target := target - _car.global_position
 	var flat := Vector3(to_target.x, 0.0, to_target.z)
 	var distance := flat.length()
@@ -81,6 +105,27 @@ func _physics_process(delta: float) -> void:
 		_flip_timer = FLIP_COOLDOWN
 
 	_car.drive_inputs(throttle, steer, boosting, false, flipping)
+
+
+# The second man holds position while the ball is up the other end. Once
+# it comes back onto its own half it stops covering and challenges like
+# anyone else.
+func _covering() -> bool:
+	if role != ROLE_SECOND or _ball == null:
+		return false
+	var toward_own_goal := _ball.global_position.z * signf(_own_goal_z)
+	return toward_own_goal < _half_length * COMMIT_DEPTH
+
+
+# Between the ball and its own goal, shaded to the middle of the pitch,
+# which is where a second man is useful.
+func _cover_point() -> Vector3:
+	var goal := Vector3(0.0, _car.global_position.y, _own_goal_z)
+	var ball_at := _ball.global_position
+	var at := goal.lerp(Vector3(ball_at.x, goal.y, ball_at.z), 1.0 - COVER_DEPTH)
+	at.x *= 0.5
+	at.y = _car.global_position.y
+	return at
 
 
 # Behind the ball, on the line from the player's goal through it - so
