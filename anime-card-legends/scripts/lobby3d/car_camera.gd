@@ -17,6 +17,13 @@ extends Node3D
 #
 # The right stick and the mouse still nudge it, so the player can look
 # around without the camera fighting them for it.
+#
+# ON THE PHYSICS CLOCK, not the render clock. The car only moves when
+# physics steps. A camera that lerped toward it every DRAWN frame was
+# moving smoothly between steps the car was not moving between, and the
+# car appeared to stutter forward in jumps - which at 185 m/s is a jump
+# of a metre and a half. Both on the same clock, the two stay locked
+# together.
 # =========================================================
 
 # Distance and height come from the player's camera settings now, which
@@ -87,7 +94,7 @@ func _ready() -> void:
 	add_child(_camera)
 	_apply_settings()
 	Settings.changed.connect(_apply_settings)
-	set_process(false)
+	set_physics_process(false)
 
 	_ball_cam = ball != null and Settings.ball_cam
 
@@ -140,7 +147,7 @@ func toggle_ball_cam() -> void:
 
 
 func activate() -> void:
-	set_process(true)
+	set_physics_process(true)
 	if _camera != null:
 		_camera.current = true
 	if target != null:
@@ -154,11 +161,11 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	set_process(false)
+	set_physics_process(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not is_processing():
+	if not is_physics_processing():
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_offset_yaw -= event.relative.x * MOUSE_SENS
@@ -210,7 +217,7 @@ func _desired_position() -> Vector3:
 	return target.global_position - back * distance + Vector3.UP * lift
 
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if target == null or not is_instance_valid(target) or _camera == null:
 		return
 

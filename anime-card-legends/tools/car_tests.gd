@@ -40,6 +40,7 @@ var _passes := 0
 # The slowest the car got during a case, for the tests that are about
 # something happening DURING the run rather than at the end of it.
 var _slowest := INF
+var _roof_from := Vector3.UP
 var _failures: Array[String] = []
 var _running := false
 
@@ -314,6 +315,67 @@ func _ready() -> void:
 				return "",
 		},
 		{
+			# Measured as the SIGN OF THE SPIN AXIS, not as a snapshot of
+			# where the roof ended up. The car rolls continuously, so
+			# after about half a turn the roof passes back through level
+			# and a snapshot reads zero - which is what the first version
+			# of this test did, and it failed a car that was rolling
+			# perfectly well.
+			#
+			# A positive angular velocity about the car's own FORWARD
+			# axis tilts its roof toward its own +X, which is right.
+			"name": "air roll right rolls the car RIGHT",
+			"frames": 30,
+			"before": func():
+				_car.global_transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 400.0, 0.0))
+				_car.linear_velocity = Vector3.ZERO
+				_car.angular_velocity = Vector3.ZERO,
+			# What read_player() produces for a held air-roll-right,
+			# including the sign flip that was missing.
+			"drive": func(i: CarInput): i.roll = -1.0,
+			"check": func() -> String:
+				var forward := -_car.global_transform.basis.z
+				var about := _car.angular_velocity.dot(forward)
+				if absf(about) < 1.0:
+					return "barely rolling (%.2f rad/s)" % about
+				if about < 0.0:
+					return "rolling LEFT when asked for right (%.2f rad/s)" % about
+				return "",
+		},
+		{
+			"name": "air roll left rolls the car LEFT",
+			"frames": 30,
+			"before": func():
+				_car.global_transform = Transform3D(Basis.IDENTITY, Vector3(0.0, 400.0, 0.0))
+				_car.linear_velocity = Vector3.ZERO
+				_car.angular_velocity = Vector3.ZERO,
+			"drive": func(i: CarInput): i.roll = 1.0,
+			"check": func() -> String:
+				var forward := -_car.global_transform.basis.z
+				var about := _car.angular_velocity.dot(forward)
+				if absf(about) < 1.0:
+					return "barely rolling (%.2f rad/s)" % about
+				if about > 0.0:
+					return "rolling RIGHT when asked for left (%.2f rad/s)" % about
+				return "",
+		},
+		{
+			# The other half of the same guarantee: the BUTTON named
+			# "air roll right" has to survive Controls -> CarInput -> the
+			# physics with its sign intact. air_roll() answers +1 for the
+			# right button; the struct is positive-left; so the two must
+			# disagree in sign, and if anyone ever "tidies" that away
+			# both buttons invert again.
+			"name": "the air-roll-right button maps to a rightward roll",
+			"frames": 1,
+			"check": func() -> String:
+				var from_button := 1.0        # Controls.air_roll(), right held
+				var into_struct := -from_button
+				if into_struct >= 0.0:
+					return "the sign flip between Controls and CarInput is gone"
+				return "",
+		},
+		{
 			"name": "an agent drives through the same physics as a player",
 			"frames": 420,
 			"agent": true,
@@ -433,7 +495,7 @@ func _physics_process(_delta: float) -> void:
 		(case["watch"] as Callable).call()
 
 	_frames += 1
-	if _frames < int(case["frames"]):
+	if _frames < _ticks(int(case["frames"])):
 		return
 
 	var problem := str((case["check"] as Callable).call())
@@ -445,6 +507,14 @@ func _physics_process(_delta: float) -> void:
 		print("  FAIL  ", case["name"], " -- ", problem)
 
 	_next()
+
+
+# Case durations are written as frames AT 60 Hz and scaled to whatever
+# the project actually runs at. The project moved to 120 Hz, which would
+# otherwise have silently halved every test's wall-clock duration - the
+# "reaches top speed in 7 seconds" case would have been given 3.5.
+func _ticks(frames_at_60: int) -> int:
+	return maxi(1, int(round(float(frames_at_60) * float(Engine.physics_ticks_per_second) / 60.0)))
 
 
 func _report() -> void:

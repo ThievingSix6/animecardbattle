@@ -32,7 +32,10 @@ const GOAL_DEPTH := GOAL_DEPTH_UU * CarBody.UU
 # straight 2x on top of it. One number to turn if it wants to be closer
 # in or further out.
 const STADIUM_MARGIN := 1.2
-const STADIUM_SCALE := 2.0
+# Was 2.0. Ten per cent off: the bowl was reaching past the arena shell,
+# so the part of the stadium you could see extended beyond anything you
+# could drive on.
+const STADIUM_SCALE := 1.8
 
 const MATCH_SECONDS := 300.0
 const KICKOFF_PAUSE := 2.0
@@ -76,6 +79,8 @@ var menu: ArenaSettings
 # and one bot; in 2v2 it is the player, a teammate and two opponents.
 var blue_team: Array[CarBody] = []
 var orange_team: Array[CarBody] = []
+
+var boost_pads: Array[BoostPad] = []
 
 var _brains: Array[ArenaBot] = []
 var _team_size := 1
@@ -158,38 +163,149 @@ func _build_environment() -> void:
 		add_child(flood)
 
 
+# The arena is ONE swept shell now - flat floor, curved transition into
+# the walls, rounded corners, curved transition into the ceiling - and
+# the triangles you see are the triangles you hit.
+#
+# What was here before: six box slabs. That is why driving out onto the
+# stadium dropped you into the void. The stadium model is bigger than the
+# box was, so the part of the arena you could SEE extended past the only
+# collision that existed, and there was nothing under it.
 func _build_pitch() -> void:
-	var body := StaticBody3D.new()
-	add_child(body)
-
-	# res://art/models/props/stadium.glb is dropped in as the stands and
-	# the roof - scenery around the pitch. The collision box below is
-	# still what the ball and the cars actually bounce off, so the model
-	# never has to be watertight or match RL's dimensions.
+	# The stands and the roof. Scenery only - the shell below is what
+	# anything actually touches.
 	_build_stadium_shell()
 
-	# Two metres of visible floor over a much deeper collider: at RL
-	# speeds the car covers three metres in one physics tick, and a thin
-	# floor is a floor it can end up underneath.
-	_slab(body, Vector3(0, -1.0, 0), Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0),
-		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")),
-		Vector3(HALF_WIDTH * 2.0, FLOOR_DEPTH, HALF_LENGTH * 2.0),
-		Vector3(0.0, 1.0 - FLOOR_DEPTH * 0.5, 0.0))
+	var shell := ArenaShell.build()
 
-	# Walls. The goal openings are cut by building each end wall as two
-	# posts and a lintel rather than one slab.
-	var wall := Textures.rock(HALF_WIDTH, Color("#1b2136"))
-	_slab(body, Vector3(-HALF_WIDTH, CEILING * 0.5, 0),
-		Vector3(2.0, CEILING, HALF_LENGTH * 2.0), wall)
-	_slab(body, Vector3(HALF_WIDTH, CEILING * 0.5, 0),
-		Vector3(2.0, CEILING, HALF_LENGTH * 2.0), wall)
-	_end_wall(body, -HALF_LENGTH, wall)
-	_end_wall(body, HALF_LENGTH, wall)
+	var body := StaticBody3D.new()
+	body.name = "ArenaShell"
+	add_child(body)
 
-	_slab(body, Vector3(0, CEILING, 0),
-		Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0), wall)
+	# Collision straight from the same triangles. A trimesh rather than
+	# boxes, so the curved corners are curved to drive on and not just to
+	# look at.
+	var shape := CollisionShape3D.new()
+	var trimesh := ConcavePolygonShape3D.new()
+	trimesh.set_faces(shell["faces"])
+	shape.shape = trimesh
+	body.add_child(shape)
 
+	var walls := MeshInstance3D.new()
+	walls.name = "Walls"
+	walls.mesh = ArenaShell.mesh_from(shell["walls"], _glass_material())
+	walls.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(walls)
+
+	var pitch := MeshInstance3D.new()
+	pitch.name = "Pitch"
+	pitch.mesh = ArenaShell.mesh_from(shell["floor"],
+		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")))
+	add_child(pitch)
+
+	_build_goal_boxes(body)
+	_build_boost_pads()
 	_paint_markings()
+
+
+# Transparent, so the stadium behind it is the thing you look at while
+# still having something solid to drive on.
+func _glass_material() -> StandardMaterial3D:
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.42, 0.62, 1.0, 0.10)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Seen from inside the arena, which is the back face of a shell whose
+	# normals point in - and from outside when the camera swings wide.
+	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
+	glass.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# A big transparent surface drawn over everything sorts badly against
+	# itself; not writing depth is what stops the far wall punching a
+	# hole in the near one.
+	glass.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	glass.emission_enabled = true
+	glass.emission = Color(0.35, 0.55, 1.0)
+	glass.emission_energy_multiplier = RenderMode.emission(0.35)
+	return glass
+
+
+# Behind each goal mouth: a box the ball can enter and cannot leave
+# except back through the mouth. The shell has a hole there, so without
+# this the ball would fly straight out of the arena.
+func _build_goal_boxes(body: StaticBody3D) -> void:
+	var sides: Array[float] = [-1.0, 1.0]
+	for side in sides:
+		var z := HALF_LENGTH * side
+		var depth := GOAL_DEPTH
+		var mouth := GOAL_HALF_WIDTH
+		var tall := GOAL_HEIGHT
+
+		# Back.
+		_collider(body, Vector3(0.0, tall * 0.5, z + depth * side),
+			Vector3(mouth * 2.0 + 4.0, tall, 2.0))
+		# Sides.
+		_collider(body, Vector3(-(mouth + 1.0), tall * 0.5, z + depth * 0.5 * side),
+			Vector3(2.0, tall, depth))
+		_collider(body, Vector3(mouth + 1.0, tall * 0.5, z + depth * 0.5 * side),
+			Vector3(2.0, tall, depth))
+		# Roof.
+		_collider(body, Vector3(0.0, tall + 1.0, z + depth * 0.5 * side),
+			Vector3(mouth * 2.0 + 4.0, 2.0, depth))
+		# Floor, level with the pitch.
+		_collider(body, Vector3(0.0, -1.0, z + depth * 0.5 * side),
+			Vector3(mouth * 2.0 + 4.0, 2.0, depth))
+
+
+func _collider(body: StaticBody3D, at: Vector3, size: Vector3) -> void:
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	shape.position = at
+	body.add_child(shape)
+
+
+# --- Boost pads ---------------------------------------------------------
+
+# The six big pads are at Rocket League's own coordinates. The small ones
+# are a symmetric arrangement rather than RL's exact list of twenty-eight,
+# which is not something to write down from memory - they are in the
+# right places to be worth driving over, and the layout is one table to
+# correct if you want the real thing.
+const BIG_PADS_UU: Array[Vector2] = [
+	Vector2(-3584.0, 0.0), Vector2(3584.0, 0.0),
+	Vector2(-3072.0, -4096.0), Vector2(3072.0, -4096.0),
+	Vector2(-3072.0, 4096.0), Vector2(3072.0, 4096.0),
+]
+
+const SMALL_PADS_UU: Array[Vector2] = [
+	Vector2(0.0, -4240.0), Vector2(0.0, 4240.0),
+	Vector2(-1792.0, -4184.0), Vector2(1792.0, -4184.0),
+	Vector2(-1792.0, 4184.0), Vector2(1792.0, 4184.0),
+	Vector2(-940.0, -3308.0), Vector2(940.0, -3308.0),
+	Vector2(-940.0, 3308.0), Vector2(940.0, 3308.0),
+	Vector2(0.0, -2816.0), Vector2(0.0, 2816.0),
+	Vector2(-3584.0, -2484.0), Vector2(3584.0, -2484.0),
+	Vector2(-3584.0, 2484.0), Vector2(3584.0, 2484.0),
+	Vector2(-1788.0, -2300.0), Vector2(1788.0, -2300.0),
+	Vector2(-1788.0, 2300.0), Vector2(1788.0, 2300.0),
+	Vector2(-2048.0, -1036.0), Vector2(2048.0, -1036.0),
+	Vector2(-2048.0, 1036.0), Vector2(2048.0, 1036.0),
+	Vector2(-1024.0, 0.0), Vector2(1024.0, 0.0),
+	Vector2(0.0, -1024.0), Vector2(0.0, 1024.0),
+]
+
+
+func _build_boost_pads() -> void:
+	for spot in BIG_PADS_UU:
+		_add_pad(spot, true)
+	for spot in SMALL_PADS_UU:
+		_add_pad(spot, false)
+
+
+func _add_pad(spot: Vector2, big: bool) -> void:
+	var pad := BoostPad.create(Vector3(spot.x * CarBody.UU, 0.0, spot.y * CarBody.UU), big)
+	add_child(pad)
+	boost_pads.append(pad)
 
 
 # The supplied stadium, wrapped around the pitch. Purely visual - the
@@ -219,38 +335,6 @@ func _build_stadium_shell() -> void:
 
 	# Dropped a little, so the stands rise from below the pitch surface.
 	model.position.y -= CEILING * 0.08
-
-
-# Two posts and a lintel, leaving the goal mouth open.
-func _end_wall(body: StaticBody3D, z: float, material: Material) -> void:
-	var side := (HALF_WIDTH - GOAL_HALF_WIDTH)
-	var offset := GOAL_HALF_WIDTH + side * 0.5
-
-	_slab(body, Vector3(-offset, CEILING * 0.5, z), Vector3(side, CEILING, 2.0), material)
-	_slab(body, Vector3(offset, CEILING * 0.5, z), Vector3(side, CEILING, 2.0), material)
-	_slab(body, Vector3(0, GOAL_HEIGHT + (CEILING - GOAL_HEIGHT) * 0.5, z),
-		Vector3(GOAL_HALF_WIDTH * 2.0, CEILING - GOAL_HEIGHT, 2.0), material)
-
-
-# One piece of the arena shell. The collider is normally the same box you
-# can see, but the floor passes a deeper one so nothing can be driven
-# through it - hence the two optional arguments.
-func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material,
-		collider_size: Vector3 = Vector3.ZERO, collider_at: Vector3 = Vector3.ZERO) -> void:
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = size
-	mesh.mesh = box
-	mesh.position = at
-	mesh.material_override = material
-	body.add_child(mesh)
-
-	var shape := CollisionShape3D.new()
-	var collider := BoxShape3D.new()
-	collider.size = size if collider_size == Vector3.ZERO else collider_size
-	shape.shape = collider
-	shape.position = at + collider_at
-	body.add_child(shape)
 
 
 # A halfway line and a centre circle, so the pitch reads as a pitch.
@@ -433,7 +517,7 @@ func _place(who: CarBody, spot: Vector3, side: float) -> void:
 		spot.x * side, who.ride_height() + 0.5, spot.z * side)
 	who.linear_velocity = Vector3.ZERO
 	who.angular_velocity = Vector3.ZERO
-	var facing := 0.0 if side > 0.0 else PI
+	var facing: float = 0.0 if side > 0.0 else PI
 	who.global_rotation = Vector3(0.0, facing, 0.0)
 	who.boost = CarBody.BOOST_MAX
 

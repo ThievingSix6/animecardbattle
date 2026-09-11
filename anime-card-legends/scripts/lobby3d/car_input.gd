@@ -18,7 +18,12 @@ extends RefCounted
 #   yaw     positive is LEFT
 #   pitch   positive is NOSE UP   (the car's own +X runs right, so this
 #                                  is negated where the torque is applied)
-#   roll    positive is clockwise seen from behind the car
+#   roll    positive is LEFT      (the roof tilts left)
+#
+# All three turning axes are positive-left, which is the one thing that
+# keeps them consistent. Working it out for roll: the torque is applied
+# about the car's +Z, and +Z points BACKWARDS, so a positive rotation
+# takes the roof (+Y) toward -X, which is the car's left.
 #
 # Left-positive steering looks wrong written down and is right in the
 # maths. It is the same sign the bot already computes from a cross
@@ -89,7 +94,12 @@ func read_player(was_jump_held: bool) -> void:
 
 	pitch = Input.get_axis("acl_back", "acl_forward")
 	yaw = steer
-	roll = Controls.air_roll()
+	# NEGATED. Controls.air_roll() answers the question the BUTTONS ask -
+	# "+1 means the player pressed air roll right" - and this struct
+	# answers the question the physics asks, where every turning axis is
+	# positive-left. Without the sign flip both buttons rolled the car
+	# the opposite way to their name.
+	roll = -Controls.air_roll()
 
 	jump_held = Input.is_action_pressed("acl_jump")
 	jump_pressed = jump_held and not was_jump_held

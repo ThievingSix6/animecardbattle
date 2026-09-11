@@ -26,6 +26,23 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[physics]
+
+; Rocket League simulates at 120 Hz and the car is built on its numbers,
+; so it runs at 120 Hz here too.
+;
+; At the 60 Hz default and RL's top speed of 2300 uu/s the car covers
+; 3.08 METRES between physics steps. Nothing is drawn between steps, so
+; at any refresh rate above 60 the car is rendered in discrete 3 m jumps
+; while the camera - which used to update every drawn frame - moved
+; smoothly between them. That relative stutter is what "the car hops
+; along the ground at max speed" actually is: the suspension holds the
+; ride height to within a millimetre at 185 m/s, measured.
+;
+; 120 Hz halves the step to 1.5 m and doubles the accuracy of the
+; suspension raycasts at speed. The camera moved onto the same clock.
+physics/common/physics_ticks_per_second=120
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"
