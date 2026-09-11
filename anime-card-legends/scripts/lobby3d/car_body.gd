@@ -26,105 +26,43 @@ extends RigidBody3D
 #   Triangle / F    get out
 # =========================================================
 
-# --- Scale -----------------------------------------------------------
+# --- Scale: CONSTANTS, deliberately -----------------------------------
 #
-# Octane's hitbox is 118.01 uu long. Everything else follows from how
-# long this car is in metres.
+# These five are `const` and have to stay that way. ArenaBall's radius,
+# the arena's pitch dimensions and the chase camera's distances are all
+# written as `something * CarBody.UU` at the top of their own files,
+# which GDScript resolves at PARSE time - an exported variable cannot be
+# used there. The unit scale is not a tuning value anyway: it is the
+# bridge between Rocket League's units and metres.
+#
+# Octane's hitbox is 118.01 uu long. Everything follows from how long
+# this car is in metres.
 const OCTANE_LENGTH_UU := 118.01
 const CAR_LENGTH := 9.45
 const UU := CAR_LENGTH / OCTANE_LENGTH_UU
 
 const CAR_WIDTH := 84.2 * UU
 const CAR_HEIGHT := 36.16 * UU
-const CAR_MASS := 180.0
 
-# The supplied car.glb is 1.40 long on X against 0.60 on Z, so its
-# LENGTH runs along X - it needed a quarter turn, not a half one, which
-# is why it sat sideways. Flip the sign if it drives backwards.
-const MODEL_YAW := PI * 0.5
-# For a model that is also tipped over. Rarely needed; here so it does
-# not have to be hunted for when it is.
-const MODEL_PITCH := 0.0
-const MODEL_ROLL := 0.0
-
-# --- Rocket League's numbers, in uu -----------------------------------
+# Rocket League's gravity, read by the ball so the two fall together.
 const RL_GRAVITY := 650.0
-const RL_MAX_SPEED := 2300.0
-const RL_MAX_SPEED_NO_BOOST := 1410.0
-const RL_BOOST_ACCEL := 991.667
-const RL_BRAKE_ACCEL := 3500.0
-const RL_COAST_ACCEL := 525.0
-# Throttle acceleration falls off with speed: full push from a
-# standstill, nothing left at the no-boost ceiling.
-const RL_THROTTLE_ACCEL_LOW := 1600.0
-const RL_THROTTLE_ACCEL_HIGH := 160.0
-
-const RL_JUMP_IMPULSE := 291.667
-const RL_JUMP_HELD_ACCEL := 1458.333
-const RL_JUMP_HELD_TIME := 0.2
-const RL_DODGE_IMPULSE := 500.0
-
-# Ride height. RL has no suspension; the raycasts here stand in for the
-# wheels, and this is how far the body floats above the ground.
-const RIDE_HEIGHT_UU := 17.0
-# Stiffness is how many times its own weight a wheel pushes back at
-# full compression; damping is tuned near critical so the car settles
-# rather than pogos. Both are derived per-wheel from the car's actual
-# weight, so they hold it at RIDE_HEIGHT at any scale.
-const SPRING_STIFFNESS := 20.0
-const SPRING_DAMPING := 40.0
-
-# --- Rotation (radians, so no unit conversion) -------------------------
-# Straight out of Rocket League: angular accelerations and the damping
-# that stops them.
-const TORQUE_PITCH := 12.146
-const TORQUE_YAW := 8.9196
-const TORQUE_ROLL := 36.0796
-const DAMP_PITCH := 2.7982
-const DAMP_YAW := 1.8865
-const DAMP_ROLL := 4.4717
-const MAX_ANGULAR := 5.5
-
-# Ground steering. RL's turn radius works out to about 2 rad/s of yaw
-# across the whole speed range; below this speed there is not enough
-# roll for the wheels to bite.
-const MAX_YAW_RATE := 2.0
-const STEER_BITE_SPEED := 220.0
-const DRIFT_YAW_BONUS := 1.6
-const GRIP := 28.0
-const DRIFT_GRIP := 4.0
-
-# --- Recovery ----------------------------------------------------------
-# Upside down and barely moving is a dead end, so jump rights the car
-# instead of doing nothing.
-const RECOVER_TILT := 0.35
-const RECOVER_SPEED := 2.6
-const RECOVER_TIME := 0.55
-
-# --- Flips -------------------------------------------------------------
-const FLIP_WINDOW := 1.5
-const FLIP_TORQUE := 5.5
-const FLIP_LOCK := 0.65
-const FLIP_DEADZONE := 0.25
-
-# --- Boost -------------------------------------------------------------
+# A full tank, read by the HUD and the arena's kickoff.
 const BOOST_MAX := 100.0
-const BOOST_DRAIN := 33.3
-const BOOST_REGEN := 9.0
 
-# Metres, derived once.
+# Ride height, and the suspension geometry derived from it. Const
+# because the raycasts are built from these in _ready() and because a
+# ride height that changed under a car already sitting on its springs
+# would just launch it.
+const RIDE_HEIGHT_UU := 17.0
 const RIDE_HEIGHT := RIDE_HEIGHT_UU * UU
-
-# --- Suspension geometry, all in metres --------------------------------
-# How far above the body origin each ray begins. A full ride height, so
-# the ray starts at roughly the car's floor and the origin has somewhere
-# to sink to before the ray's own start point goes underground.
+# How far above the body origin each ray begins - a full ride height, so
+# the origin has somewhere to sink to before the ray's own start goes
+# underground.
 const RAY_LIFT := RIDE_HEIGHT
 # Ray start to wheel contact with the spring at rest.
 const REST_LENGTH := RAY_LIFT + RIDE_HEIGHT
 # Plus room for the suspension to droop before the ray gives up.
 const RAY_LENGTH := REST_LENGTH + RIDE_HEIGHT * 1.5
-
 # The un-burying probe: how far above the origin it starts and how far
 # down it reaches. The lift only has to beat one physics frame of falling.
 const PROBE_LIFT := RIDE_HEIGHT * 4.0
@@ -132,11 +70,113 @@ const PROBE_REACH := RIDE_HEIGHT * 4.0
 # A surface within this of the origin is the road the car is sitting on,
 # not a ceiling it is buried under.
 const SURFACE_SLACK := RIDE_HEIGHT * 0.25
-const MAX_SPEED := RL_MAX_SPEED * UU
-const MAX_SPEED_NO_BOOST := RL_MAX_SPEED_NO_BOOST * UU
+
+
+# --- Everything else is tunable ---------------------------------------
+#
+# All of it exported, all of it defaulted to Rocket League's published
+# figure, and anything measured in uu says so in its name so a value can
+# be checked against RL's own without converting first. Open
+# res://scenes/Car.tscn to change any of it.
+
+@export_group("Body")
+@export var car_mass := 180.0
+# The supplied car.glb is 1.40 long on X against 0.60 on Z, so its
+# LENGTH runs along X - it needs a quarter turn, not a half one. Flip
+# the sign if it drives backwards.
+@export var model_yaw := PI * 0.5
+@export var model_pitch := 0.0
+@export var model_roll := 0.0
+
+@export_group("Driving")
+@export var max_speed_uu := 2300.0
+@export var max_speed_no_boost_uu := 1410.0
+# Throttle acceleration falls off with speed: full push from a
+# standstill, nothing left at the no-boost ceiling.
+@export var forward_acceleration_uu := 1600.0
+@export var forward_acceleration_top_uu := 160.0
+@export var brake_strength_uu := 3500.0
+# RL bleeds speed off at a fixed rate when the throttle is released
+# rather than rolling on.
+@export var coast_deceleration_uu := 525.0
+
+@export_group("Steering")
+# RL's turn radius works out to about 2 rad/s of yaw across the whole
+# speed range; below the bite speed there is not enough load on the
+# wheels to turn at all.
+@export var steering_yaw_rate := 2.0
+@export var steering_bite_speed_uu := 220.0
+@export var handbrake_yaw_bonus := 1.6
+# How hard the car refuses to travel sideways. Dropping it is what makes
+# a powerslide slide.
+@export var sideways_friction := 28.0
+@export var handbrake_sideways_friction := 4.0
+
+@export_group("Suspension")
+# Stiffness is how many times its own weight a wheel pushes back at full
+# compression; damping is tuned near critical so the car settles rather
+# than pogos. Both are per-wheel and scaled by the car's real weight, so
+# they hold it at RIDE_HEIGHT whatever the car masses.
+@export var spring_strength := 20.0
+@export var damper_strength := 40.0
+
+@export_group("Air control")
+# Rocket League's angular accelerations, in rad/s^2, and the damping
+# that stops them. Damping only applies to an axis that is NOT being
+# driven, which is what makes RL's air control hold a rotation instead
+# of springing back to level.
+@export var air_pitch_strength := 12.146
+@export var air_yaw_strength := 8.9196
+@export var air_roll_strength := 36.0796
+@export var air_pitch_damping := 2.7982
+@export var air_yaw_damping := 1.8865
+@export var air_roll_damping := 4.4717
+@export var max_angular_speed := 5.5
+
+@export_group("Jump and flip")
+@export var jump_force_uu := 291.667
+# Holding jump keeps pushing for a fifth of a second - that is what makes
+# RL's jump height depend on how long the button is held.
+@export var jump_hold_force_uu := 1458.333
+@export var jump_hold_time := 0.2
+@export var flip_impulse_uu := 500.0
+# How long after leaving the ground a flip is still available.
+@export var flip_window := 1.5
+@export var flip_rotation_speed := 5.5
+# How long the flip owns the car's rotation before control returns.
+@export var flip_duration := 0.65
+# How far from centre the stick has to be for a second jump to become a
+# directional flip.
+@export var flip_deadzone := 0.25
+
+@export_group("Boost")
+@export var boost_drain_rate := 33.3
+@export var boost_recharge_rate := 9.0
+@export var boost_acceleration_uu := 991.667
+
+@export_group("Recovery")
+# Upside down and barely moving is a dead end, so jump rights the car
+# instead of doing nothing.
+@export var recover_tilt := 0.35
+@export var recover_speed := 2.6
+@export var recover_time := 0.55
+
+
+# Top speeds in metres, which is what the physics actually works in.
+func max_speed() -> float:
+	return max_speed_uu * UU
+
+
+func max_speed_no_boost() -> float:
+	return max_speed_no_boost_uu * UU
+
 
 var boost := BOOST_MAX
 var driver_seated := false
+
+# EVERYTHING the car reacts to. Filled from the InputMap when a person
+# is driving and by drive_inputs() when an agent is.
+var input := CarInput.new()
 
 var _shell: Node3D
 var _rays: Array[RayCast3D] = []
@@ -185,12 +225,25 @@ const SOUND_FADE := 6.0
 const ENGINE_BLEND_SPEED := 0.18
 
 
+# Instanced from res://scenes/Car.tscn when it is there, so the exported
+# tuning above can be changed in the inspector and every car in the game
+# picks the new values up. Falls back to a bare new() with the defaults
+# if the scene is missing, so nothing breaks for want of a file.
+const SCENE := "res://scenes/Car.tscn"
+
+
 static func create() -> CarBody:
+	if ResourceLoader.exists(SCENE):
+		var packed: PackedScene = load(SCENE)
+		var node := packed.instantiate()
+		if node is CarBody:
+			return node
+		node.queue_free()
 	return CarBody.new()
 
 
 func _ready() -> void:
-	mass = CAR_MASS
+	mass = car_mass
 	# Godot's gravity is 9.8 m/s2; Rocket League's is 650 uu/s2.
 	gravity_scale = (RL_GRAVITY * UU) / 9.8
 	linear_damp = 0.0
@@ -263,8 +316,8 @@ func _build_shell() -> void:
 		# spin(), not `model.rotation =`: car.glb carries its Y-up
 		# conversion and a x100 unit conversion on its own root node, and
 		# assigning euler angles over that wiped both out.
-		Models.spin(model, MODEL_YAW)
-		Models.tilt(model, MODEL_PITCH, MODEL_ROLL)
+		Models.spin(model, model_yaw)
+		Models.tilt(model, model_pitch, model_roll)
 
 		var holder := Node3D.new()
 		_shell.add_child(holder)
@@ -431,25 +484,22 @@ func is_grounded() -> bool:
 	return _grounded
 
 
-# Set by a bot instead of a human. Same fields the player's controls
-# produce, so an AI car drives through exactly the same physics with no
-# special case anywhere below.
-var ai_throttle := 0.0
-var ai_steer := 0.0
-var ai_boost := false
-var ai_drift := false
-var ai_jump := false
+# --- Driven by an agent ---------------------------------------------
+#
+# The same struct the player's controls fill, so a bot's car goes through
+# exactly the same physics with no special case anywhere below it. This
+# is the seam an AI agent plugs into later: give it the struct and it has
+# everything a person has and nothing more.
+
+# True while an agent is filling `input` instead of the InputMap.
 var ai_driven := false
 
 
 func drive_inputs(throttle: float, steer: float, boosting: bool, drifting: bool, jumping: bool) -> void:
 	ai_driven = true
 	driver_seated = true
-	ai_throttle = throttle
-	ai_steer = steer
-	ai_boost = boosting
-	ai_drift = drifting
-	ai_jump = jumping
+	input.drive(throttle, steer, boosting, drifting, jumping, _was_jump_down)
+	_was_jump_down = input.jump_held
 
 
 func _physics_process(delta: float) -> void:
@@ -457,22 +507,20 @@ func _physics_process(delta: float) -> void:
 	_apply_suspension()
 
 	if not driver_seated:
+		input.clear()
+		_was_jump_down = false
 		if _grounded:
 			linear_velocity = linear_velocity.lerp(Vector3.ZERO, 3.0 * delta)
 		return
 
-	var throttle := Controls.throttle()
-	var steer := Input.get_axis("acl_right", "acl_left")
-	var pitch := Input.get_axis("acl_back", "acl_forward")
-	var drifting := Input.is_action_pressed("acl_drift")
-	var boosting := Input.is_action_pressed("acl_boost") and boost > 0.0
+	# ONE place reads the controls, and only when a person is driving.
+	# An agent fills the same struct through drive_inputs() instead, so
+	# everything below this line cannot tell the two apart.
+	if not ai_driven:
+		input.read_player(_was_jump_down)
+	_was_jump_down = input.jump_held
 
-	if ai_driven:
-		throttle = ai_throttle
-		steer = ai_steer
-		pitch = 0.0
-		drifting = ai_drift
-		boosting = ai_boost and boost > 0.0
+	var boosting := input.boost_held and boost > 0.0
 
 	if _recovering > 0.0:
 		_recovering -= delta
@@ -480,19 +528,21 @@ func _physics_process(delta: float) -> void:
 	elif _grounded:
 		_airborne_for = 0.0
 		_jumps_used = 0
-		_drive(throttle, boosting)
-		_steer(steer, drifting, delta)
-		_grip(drifting, delta)
+		_drive(input.throttle, boosting)
+		_steer(input.steer, input.handbrake_held, delta)
+		_grip(input.handbrake_held, delta)
 	else:
 		_airborne_for += delta
-		_air_control(pitch, steer, drifting, Controls.air_roll() if not ai_driven else 0.0, delta)
+		_air_control(input.pitch, input.yaw, input.handbrake_held, input.roll, delta)
 
 	_apply_boost(boosting, delta)
 	_handle_jump(delta)
-	_update_sound(throttle, boosting, delta)
+	_update_sound(input.throttle, boosting, delta)
 
 	if _flip_lock > 0.0:
 		_flip_lock -= delta
+
+	_clamp_speed()
 
 
 # --- Ground ---------------------------------------------------------
@@ -565,7 +615,7 @@ func _apply_suspension() -> void:
 		# response. Gravity is already scaled, so this holds it up at
 		# exactly RIDE_HEIGHT whatever the scale.
 		var weight := mass * 9.8 * gravity_scale * 0.25
-		var force := weight * (compression * SPRING_STIFFNESS) - closing * SPRING_DAMPING * mass * 0.25
+		var force := weight * (compression * spring_strength) - closing * damper_strength * mass * 0.25
 		apply_force(up * maxf(force, 0.0), offset)
 
 
@@ -576,24 +626,24 @@ func _drive(throttle: float, boosting: bool) -> void:
 	if absf(throttle) < 0.02:
 		# Coasting: RL bleeds off at a fixed rate rather than rolling on.
 		if absf(along) > 0.01:
-			apply_central_force(-forward * signf(along) * RL_COAST_ACCEL * UU * mass)
+			apply_central_force(-forward * signf(along) * coast_deceleration_uu * UU * mass)
 		return
 
 	# Throttle against the way it is already moving is braking.
 	if along * throttle < -0.01 and absf(along) > 0.02:
-		apply_central_force(forward * signf(throttle) * RL_BRAKE_ACCEL * UU * mass)
+		apply_central_force(forward * signf(throttle) * brake_strength_uu * UU * mass)
 		return
 
-	var ceiling := MAX_SPEED_NO_BOOST
+	var ceiling := max_speed_no_boost()
 	if boosting:
-		ceiling = MAX_SPEED
+		ceiling = max_speed()
 	if absf(along) >= ceiling:
 		return
 
 	# RL's throttle curve: full push from rest, nothing left at the
 	# no-boost ceiling.
-	var fraction := clampf(absf(along) / MAX_SPEED_NO_BOOST, 0.0, 1.0)
-	var accel := lerpf(RL_THROTTLE_ACCEL_LOW, RL_THROTTLE_ACCEL_HIGH, fraction)
+	var fraction := clampf(absf(along) / max_speed_no_boost(), 0.0, 1.0)
+	var accel := lerpf(forward_acceleration_uu, forward_acceleration_top_uu, fraction)
 	apply_central_force(forward * throttle * accel * UU * mass)
 
 
@@ -603,11 +653,11 @@ func _drive(throttle: float, boosting: bool) -> void:
 func _steer(steer: float, drifting: bool, delta: float) -> void:
 	var forward := -global_transform.basis.z
 	var along := linear_velocity.dot(forward)
-	var bite := clampf(absf(along) / (STEER_BITE_SPEED * UU), 0.0, 1.0)
+	var bite := clampf(absf(along) / (steering_bite_speed_uu * UU), 0.0, 1.0)
 
-	var rate := MAX_YAW_RATE * steer * bite * signf(along)
+	var rate := steering_yaw_rate * steer * bite * signf(along)
 	if drifting:
-		rate *= DRIFT_YAW_BONUS
+		rate *= handbrake_yaw_bonus
 
 	# Replace the yaw component, leave pitch and roll to the springs.
 	var spin := angular_velocity
@@ -623,9 +673,9 @@ func _grip(drifting: bool, delta: float) -> void:
 	var side := global_transform.basis.x
 	var sideways := linear_velocity.dot(side)
 
-	var strength := GRIP
+	var strength := sideways_friction
 	if drifting:
-		strength = DRIFT_GRIP
+		strength = handbrake_sideways_friction
 
 	linear_velocity -= side * sideways * clampf(strength * delta, 0.0, 1.0)
 
@@ -665,25 +715,23 @@ func _air_control(pitch: float, yaw_or_roll: float, rolling: bool,
 	# back to level.
 	# Negated: a positive rotation about the car's right axis drops the
 	# nose, so stick-up would tilt the car down without this.
-	local.x += (TORQUE_PITCH * -pitch - DAMP_PITCH * local.x * (1.0 - absf(pitch))) * delta
-	local.y += (TORQUE_YAW * yaw - DAMP_YAW * local.y * (1.0 - absf(yaw))) * delta
-	local.z += (TORQUE_ROLL * roll - DAMP_ROLL * local.z * (1.0 - absf(roll))) * delta
+	local.x += (air_pitch_strength * -pitch - air_pitch_damping * local.x * (1.0 - absf(pitch))) * delta
+	local.y += (air_yaw_strength * yaw - air_yaw_damping * local.y * (1.0 - absf(yaw))) * delta
+	local.z += (air_roll_strength * roll - air_roll_damping * local.z * (1.0 - absf(roll))) * delta
 
 	var world := frame.x * local.x + frame.y * local.y + frame.z * local.z
-	if world.length() > MAX_ANGULAR:
-		world = world.normalized() * MAX_ANGULAR
+	if world.length() > max_angular_speed:
+		world = world.normalized() * max_angular_speed
 	angular_velocity = world
 
 
 # --- Jumps and flips -------------------------------------------------
 
 func _handle_jump(delta: float) -> void:
-	var down := Input.is_action_pressed("acl_jump")
-	if ai_driven:
-		down = ai_jump
-		ai_jump = false
-	var pressed := down and not _was_jump_down
-	_was_jump_down = down
+	var down := input.jump_held
+	var pressed := input.jump_pressed
+	# Consumed, so one press is one jump however many times this runs.
+	input.jump_pressed = false
 
 	if _recovering > 0.0:
 		return
@@ -695,9 +743,9 @@ func _handle_jump(delta: float) -> void:
 
 	# Holding jump keeps pushing for a fifth of a second - that is what
 	# makes RL's jump height depend on how long the button is held.
-	if down and _jump_held_for > 0.0 and _jump_held_for < RL_JUMP_HELD_TIME:
+	if down and _jump_held_for > 0.0 and _jump_held_for < jump_hold_time:
 		_jump_held_for += delta
-		apply_central_force(global_transform.basis.y * RL_JUMP_HELD_ACCEL * UU * mass)
+		apply_central_force(global_transform.basis.y * jump_hold_force_uu * UU * mass)
 	elif not down:
 		_jump_held_for = 0.0
 
@@ -708,32 +756,29 @@ func _handle_jump(delta: float) -> void:
 		_jump()
 		return
 
-	if _jumps_used >= 2 or _airborne_for > FLIP_WINDOW:
+	if _jumps_used >= 2 or _airborne_for > flip_window:
 		return
 
-	var throttle := Input.get_axis("acl_back", "acl_forward")
-	var steer := Input.get_axis("acl_right", "acl_left")
-
-	if absf(throttle) < FLIP_DEADZONE and absf(steer) < FLIP_DEADZONE:
-		_second_jump()
+	if input.flip_aimed(flip_deadzone):
+		_flip(input.flip_forward, input.flip_side)
 	else:
-		_flip(throttle, steer)
+		_second_jump()
 
 
 # Upside down, or nearly, and not going anywhere.
 func _is_stranded() -> bool:
-	if global_transform.basis.y.dot(Vector3.UP) > RECOVER_TILT:
+	if global_transform.basis.y.dot(Vector3.UP) > recover_tilt:
 		return false
-	return _grounded or linear_velocity.length() < MAX_SPEED_NO_BOOST * 0.08
+	return _grounded or linear_velocity.length() < max_speed_no_boost() * 0.08
 
 
 func _start_recovery() -> void:
-	_recovering = RECOVER_TIME
+	_recovering = recover_time
 	_jumps_used = 2
 	_flip_lock = 0.0
 	# A nudge off the ground, so it rolls clear instead of grinding on
 	# its roof.
-	linear_velocity += Vector3.UP * RL_JUMP_IMPULSE * UU * 0.6
+	linear_velocity += Vector3.UP * jump_force_uu * UU * 0.6
 	Audio.play("click")
 
 
@@ -749,7 +794,7 @@ func _right_the_car(delta: float) -> void:
 	axis = axis.normalized()
 
 	var error := up.angle_to(Vector3.UP)
-	angular_velocity = axis * minf(error / maxf(RECOVER_TIME, 0.01), MAX_ANGULAR) * RECOVER_SPEED * 0.5
+	angular_velocity = axis * minf(error / maxf(recover_time, 0.01), max_angular_speed) * recover_speed * 0.5
 
 	# Held up just long enough to finish the roll.
 	apply_central_force(Vector3.UP * mass * 9.8 * gravity_scale * 0.45)
@@ -765,20 +810,20 @@ func _jump() -> void:
 	_jumps_used = 1
 	_airborne_for = 0.0
 	_jump_held_for = 0.001
-	linear_velocity += global_transform.basis.y * RL_JUMP_IMPULSE * UU
+	linear_velocity += global_transform.basis.y * jump_force_uu * UU
 	Audio.play("click")
 
 
 func _second_jump() -> void:
 	_jumps_used = 2
-	linear_velocity += global_transform.basis.y * RL_JUMP_IMPULSE * UU
+	linear_velocity += global_transform.basis.y * jump_force_uu * UU
 
 
 # Front, back and side flips are one move with a different axis: a shove
 # in the stick's direction and a spin about the axis at right angles.
 func _flip(throttle: float, steer: float) -> void:
 	_jumps_used = 2
-	_flip_lock = FLIP_LOCK
+	_flip_lock = flip_duration
 
 	var frame := global_transform.basis
 	var aim := Vector2(steer, throttle).normalized()
@@ -788,9 +833,9 @@ func _flip(throttle: float, steer: float) -> void:
 	# flip goes where it was aimed rather than where it was drifting.
 	var flat := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
 	linear_velocity -= flat * 0.25
-	linear_velocity += direction * RL_DODGE_IMPULSE * UU
+	linear_velocity += direction * flip_impulse_uu * UU
 
-	angular_velocity = (frame.x * -aim.y - frame.z * aim.x).normalized() * FLIP_TORQUE
+	angular_velocity = (frame.x * -aim.y - frame.z * aim.x).normalized() * flip_rotation_speed
 	Audio.play("click")
 
 
@@ -798,13 +843,39 @@ func _flip(throttle: float, steer: float) -> void:
 
 func _apply_boost(boosting: bool, delta: float) -> void:
 	if boosting and boost > 0.0:
-		boost = maxf(0.0, boost - BOOST_DRAIN * delta)
-		apply_central_force(-global_transform.basis.z * RL_BOOST_ACCEL * UU * mass)
+		# Drained whether or not it is still adding speed, which is what
+		# RL does - boosting at supersonic costs boost and buys nothing.
+		boost = maxf(0.0, boost - boost_drain_rate * delta)
 		_set_boosting(true)
+
+		var forward := -global_transform.basis.z
+		if linear_velocity.dot(forward) < max_speed():
+			apply_central_force(forward * boost_acceleration_uu * UU * mass)
 		return
 
-	boost = minf(BOOST_MAX, boost + BOOST_REGEN * delta)
+	boost = minf(BOOST_MAX, boost + boost_recharge_rate * delta)
 	_set_boosting(false)
+
+
+# Rocket League clamps a car to 2300 uu/s in EVERY direction - boost,
+# gravity, collisions and flips included - and that clamp was missing.
+#
+# The only thing limiting speed was the throttle curve, and boost does
+# not go through the throttle curve: _apply_boost() pushed at a flat
+# 991.667 uu/s^2 for as long as there was boost in the tank and nothing
+# ever said stop. The acceptance test measured 286 m/s against a ceiling
+# of 184.
+func _clamp_speed() -> void:
+	var top := max_speed()
+	var moving := linear_velocity.length()
+	if moving > top:
+		linear_velocity = linear_velocity * (top / moving)
+
+	# The same for rotation, which flips and collisions can otherwise
+	# push past what air control is able to pull back.
+	var spin := angular_velocity.length()
+	if spin > max_angular_speed:
+		angular_velocity = angular_velocity * (max_angular_speed / spin)
 
 
 func _update_sound(throttle: float, boosting: bool, delta: float) -> void:
@@ -816,7 +887,7 @@ func _update_sound(throttle: float, boosting: bool, delta: float) -> void:
 # idle is what you hear sitting still and the driving loop takes over
 # as it rolls.
 func _update_engine(throttle: float, delta: float) -> void:
-	var fraction := clampf(speed() / MAX_SPEED, 0.0, 1.0)
+	var fraction := clampf(speed() / max_speed(), 0.0, 1.0)
 	var effort := clampf(fraction / ENGINE_BLEND_SPEED, 0.0, 1.0)
 	effort = maxf(effort, absf(throttle))
 
