@@ -79,7 +79,7 @@ const PAD_RADIUS := 13.0
 # Both are spent near the middle, where the player actually is.
 const LIT_RADIUS := 220.0
 const MAX_STREET_LIGHTS := 22
-const MAX_NEON_SIGNS := 26
+const MAX_NEON_SIGNS := 40
 # Only some signs get a real light; the rest glow on their own. The
 # Compatibility renderer only lets a given surface take eight omni
 # lights, so real lights are spent, not scattered.
@@ -147,6 +147,7 @@ func _ready() -> void:
 
 	Audio.play_music("music_lobby")
 	_build_environment()
+	_build_horizon()
 	_build_ground()
 	_build_streets()
 	_build_skyline()
@@ -227,14 +228,20 @@ func _build_environment() -> void:
 	# fallback ran to purple at the horizon, which read as unfinished.
 	env.sky = SkyBuilder.night_city()
 
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.3
+	# Ambient comes from a colour rather than the sky, so the whole
+	# district sits in the same purple wash regardless of which panorama
+	# is loaded. This is most of what makes it read as cyberpunk: every
+	# unlit surface picks up the city's own glow.
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#6a3ff0")
+	env.ambient_light_energy = 0.55
 
 	# Haze is what sells a neon city: it gives every sign a halo, and it
 	# hides where the district stops.
 	env.fog_enabled = true
-	env.fog_light_color = Color("#1d1830")
-	env.fog_density = 0.006
+	env.fog_light_color = Color("#3a1f5c")
+	env.fog_density = 0.0035
+	env.fog_sun_scatter = 0.25
 
 	# THE reason the sky was a flat colour. fog_sky_affect defaults to
 	# 1.0, and the sky sits at infinite depth, so exponential fog
@@ -254,13 +261,21 @@ func _build_environment() -> void:
 	world_env.environment = env
 	add_child(world_env)
 
-	# Moonlight only - the city lights itself.
+	# Moonlight only, and tinted violet so even the shadows are in
+	# palette. The city lights everything else.
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-58, -40, 0)
-	moon.light_energy = RenderMode.light(0.4)
-	moon.light_color = Color("#8ea6ff")
+	moon.light_energy = RenderMode.light(0.35)
+	moon.light_color = Color("#9b7cff")
 	moon.shadow_enabled = true
 	add_child(moon)
+
+
+# Mountains so the district ends in a skyline rather than the void, and
+# a purple haze dome over the lot.
+func _build_horizon() -> void:
+	var horizon := Horizon.create(CITY_HALF)
+	add_child(horizon)
 
 
 # --- Ground and streets ---------------------------------------------
@@ -270,12 +285,10 @@ func _build_ground() -> void:
 	add_child(ground)
 
 	# Dark and smooth, so every sign smears across it like wet asphalt.
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#0e1018")
-	mat.roughness = 0.22
-	mat.metallic = 0.35
-
+	# res://art/textures/sidewalk.png replaces the flat colour when it
+	# is there.
 	var span := CITY_HALF * 2.0 / float(GROUND_TILES)
+	var mat := Textures.sidewalk(span, Color("#0e1018"))
 	var slab := BoxMesh.new()
 	slab.size = Vector3(span, 1.0, span)
 
@@ -379,13 +392,10 @@ func _street_strip(at: Vector3, size: Vector3, avenue: bool) -> void:
 	strip.mesh = box
 	strip.position = at
 
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#141824")
+	var tint := Color("#141824")
 	if avenue:
-		mat.albedo_color = Color("#181d2b")
-	mat.roughness = 0.28
-	mat.metallic = 0.3
-	strip.material_override = mat
+		tint = Color("#181d2b")
+	strip.material_override = Textures.road(maxf(size.x, size.z), tint)
 	add_child(strip)
 
 
