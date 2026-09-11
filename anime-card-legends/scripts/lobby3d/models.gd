@@ -92,6 +92,10 @@ static func has_prop(prop_name: String) -> bool:
 
 # Every model sitting in a props subfolder, so a folder can be a
 # pool - drop three mountains in and all three get used.
+#
+# A name starting with "_" is skipped, so a file can be parked in a pool
+# folder without joining the pool. That is the quick way to take one
+# model out of the city without moving it: _tower.glb.
 static func list_props(subfolder: String) -> Array[String]:
 	var folder := PROP_FOLDER + subfolder
 	if not folder.ends_with("/"):
@@ -105,7 +109,7 @@ static func list_props(subfolder: String) -> Array[String]:
 	dir.list_dir_begin()
 	var file_name := dir.get_next()
 	while file_name != "":
-		if not dir.current_is_dir():
+		if not dir.current_is_dir() and not file_name.begins_with("_"):
 			var lower := file_name.to_lower()
 			for ext in EXTENSIONS:
 				if lower.ends_with("." + ext):
@@ -195,44 +199,117 @@ static func spawn_npc(npc_id: String) -> Node3D:
 	return node
 
 
-# The first mesh inside an imported model, for drawing many copies of
-# one building through a single MultiMesh instead of a node each.
-static func first_mesh(root: Node) -> Mesh:
-	if root is MeshInstance3D:
-		var as_mesh: MeshInstance3D = root
-		if as_mesh.mesh != null:
-			return as_mesh.mesh
-	for child in root.get_children():
-		var found := first_mesh(child)
-		if found != null:
-			return found
-	return null
+# EVERY mesh inside an imported model, baked into one Mesh, for drawing
+# many copies through a single MultiMesh instead of a node each.
+#
+# This replaced first_mesh_info(), which returned literally the first
+# mesh it found and nothing else. Most of these models are not one mesh:
+#
+#   stadium.glb   17 meshes. One 4530 x 181 x 381 beam was being drawn
+#                 in place of an 8575 x 4661 x 5916 stadium.
+#   mcdonalds     11 meshes. A 0.55-wide sliver of a 30 x 8 x 24
+#                 restaurant.
+#   the trees     21 and 6 meshes. One branch cluster of a tree.
+#   the mountains 10 meshes, the vending machines 7 and 5.
+#
+# Every one of those was drawn as a fragment of itself everywhere it
+# appeared in the world.
+#
+# THE TRANSFORMS ARE NOT OPTIONAL EITHER. That was the orientation bug,
+# and it is baked in here: almost every .glb was authored in a Z-up tool
+# and exported with the Y-up conversion as a -90 degrees X rotation on
+# the model's ROOT NODE rather than in the vertices.
+#
+#   Bench_02.glb   mesh data 192 x 72 x 55    (Z-up, on its back)
+#                  under its root node        1.92 x 0.55 x 0.72  correct
+#
+# Instancing a model as nodes applies all of that, which is why the node
+# path always looked right. Pulling a bare Mesh out threw it away.
+#
+# Surfaces are grouped by material, so a model with three materials
+# across twenty meshes commits three surfaces rather than twenty, and a
+# MultiMesh draws all of them.
+#
+# Returns {"mesh": Mesh, "correction": Transform3D}. The correction is
+# always the identity - it is already in the vertices - but it is still
+# returned so the fit helpers have one shape to work with.
+static func merged_mesh_info(root: Node3D, base_path: String = "") -> Dictionary:
+	var empty := {"mesh": null, "correction": Transform3D.IDENTITY}
+	if root == null:
+		return empty
+
+	# Material -> the SurfaceTool collecting everything drawn with it.
+	var builders: Dictionary = {}
+	var order: Array = []
+	_gather_surfaces(root, root, model_frame(root), builders, order)
+	if order.is_empty():
+		return empty
+
+	var texture := emissive_texture(base_path) if base_path != "" else null
+
+	var merged := ArrayMesh.new()
+	for key in order:
+		var builder: SurfaceTool = builders[key]
+		builder.index()
+		builder.commit(merged)
+
+		var material: Material = key if key is Material else null
+		merged.surface_set_material(merged.get_surface_count() - 1, _lit_copy(material, texture))
+
+	return {"mesh": merged, "correction": Transform3D.IDENTITY}
 
 
-# The material a MultiMesh should draw that mesh with, emissive sidecar
-# included - a MultiMeshInstance3D has one material for every copy.
-static func first_material(root: Node, base_path: String) -> Material:
-	var node := _first_mesh_node(root)
-	if node == null:
-		return null
+# Walks the model, appending every surface of every MeshInstance3D into
+# the builder for its material, with the node's own transform applied.
+static func _gather_surfaces(node: Node, root: Node, frame: Transform3D,
+		builders: Dictionary, order: Array) -> void:
+	if node is MeshInstance3D:
+		var mesh_node: MeshInstance3D = node
+		if mesh_node.mesh != null:
+			var placement := frame * _relative_transform(mesh_node, root)
+			for i in mesh_node.mesh.get_surface_count():
+				var material: Material = mesh_node.get_surface_override_material(i)
+				if material == null:
+					material = mesh_node.mesh.surface_get_material(i)
 
-	var source: Material = node.get_surface_override_material(0)
-	if source == null and node.mesh != null and node.mesh.get_surface_count() > 0:
-		source = node.mesh.surface_get_material(0)
-	if source == null or not (source is BaseMaterial3D):
-		return source
+				# Dictionary keys have to be hashable and a null material
+				# is not a key, so unmaterialled surfaces share one bucket.
+				var key: Variant = material if material != null else 0
+				if not builders.has(key):
+					var builder := SurfaceTool.new()
+					builder.begin(Mesh.PRIMITIVE_TRIANGLES)
+					builders[key] = builder
+					order.append(key)
 
-	var texture := emissive_texture(base_path)
-	if texture == null:
-		return source
+				var into: SurfaceTool = builders[key]
+				into.append_from(mesh_node.mesh, i, placement)
 
-	var base: BaseMaterial3D = source
+	for child in node.get_children():
+		_gather_surfaces(child, root, frame, builders, order)
+
+
+# The material with the sidecar emissive map applied, or the material
+# untouched when there is no sidecar or it already has its own emission.
+static func _lit_copy(material: Material, texture: Texture2D) -> Material:
+	if material == null or texture == null or not (material is BaseMaterial3D):
+		return material
+
+	var base: BaseMaterial3D = material
 	if base.emission_enabled and base.emission_texture != null:
 		return base
 
 	var lit: BaseMaterial3D = base.duplicate()
 	_light_material(lit, texture, EMISSIVE_ENERGY)
 	return lit
+
+
+# The first mesh on its own, for the callers that only need to know
+# whether the model has drawable geometry at all.
+static func first_mesh(root: Node) -> Mesh:
+	var node := _first_mesh_node(root)
+	if node == null:
+		return null
+	return node.mesh
 
 
 static func _first_mesh_node(root: Node) -> MeshInstance3D:
@@ -248,16 +325,38 @@ static func _first_mesh_node(root: Node) -> MeshInstance3D:
 # The MultiMesh version of fit_box: the horizontal and vertical scales
 # a mesh needs to stand `height` tall on a `width` footprint, plus how
 # far to lift it so its base sits on the ground.
-static func mesh_fit_box(mesh: Mesh) -> Dictionary:
-	var box := mesh.get_aabb()
+#
+# Takes the dictionary from merged_mesh_info(), not a bare Mesh, so the
+# model's own root correction is measured in and carried through to
+# box_transform().
+static func mesh_fit_box(info: Dictionary, model_name: String = "") -> Dictionary:
+	var correction := _correction(info, model_name)
+	var box: AABB = correction * _mesh_aabb(info)
+
 	var widest := maxf(box.size.x, box.size.z)
 	if box.size.y <= 0.0001 or widest <= 0.0001:
-		return {"per_width": 1.0, "per_height": 1.0, "base": 0.0}
+		return {"per_width": 1.0, "per_height": 1.0, "base": 0.0, "correction": correction}
+
 	return {
 		"per_width": 1.0 / widest,
 		"per_height": 1.0 / box.size.y,
 		"base": -box.position.y / box.size.y,
+		"correction": correction,
 	}
+
+
+# Where one copy of a mesh_fit_box() model goes: yawed by `spin`, stood
+# on `at`, scaled to its own footprint and height, with the model's root
+# correction innermost so the geometry is the right way up.
+static func box_transform(fit: Dictionary, at: Vector3, spin: float,
+		width: float, height: float) -> Transform3D:
+	var per_width := float(fit["per_width"])
+	var per_height := float(fit["per_height"])
+	var sized := Basis.IDENTITY.scaled(
+		Vector3(per_width * width, per_height * height, per_width * width))
+	var lift := Vector3(0.0, float(fit["base"]) * height, 0.0)
+	var correction: Transform3D = fit["correction"]
+	return Transform3D(Basis(Vector3.UP, spin), at) * Transform3D(sized, lift) * correction
 
 
 # --- Emissive sidecars ----------------------------------------------------
@@ -441,77 +540,156 @@ static func _light_material(material: BaseMaterial3D, texture: Texture2D, energy
 
 # --- Orientation -----------------------------------------------------------
 #
-# Plenty of models arrive Z-up: authored in a tool whose up axis is Z,
-# exported without the conversion. In Godot they lie on their face.
+# There used to be a bounding-box guess here: "a model whose Z extent is
+# bigger than its Y extent is lying on its back, stand it up". It was
+# wrong, and it was wrong in both directions at once.
 #
-# Detected from the bounding box - a model whose Z extent is clearly
-# greater than its Y extent is standing on its back - and overridable
-# from the filename, because a guess is a guess:
+# Measured across all 43 models in this project, NOT ONE of them is
+# actually Z-up once its own node transform is applied. Every single one
+# already carries the Y-up conversion on its glTF root node. The guess
+# was a coin flip on top of geometry that was already correct: it stood
+# the signs and the trees up (right, by luck, because the MultiMesh path
+# had separately discarded their correction) and it tipped the bench, the
+# booths, the restaurant, the mountains and the stadium over (wrong).
 #
-#     Japanese_Sign_01_zup.glb   always rotated upright
-#     Terrain_Patch_yup.glb      never rotated
+# The correction is a fact recorded in the file. It does not need to be
+# guessed - it needs to not be thrown away, which is what
+# merged_mesh_info() now fixes.
 #
-# Something wide and flat that really is Y-up, like a terrain patch,
-# is the case the guess gets wrong, so that is what _yup is for.
+# What survives is the manual override, for a model that genuinely lacks
+# the conversion node:
+#
+#     Japanese_Sign_01_zup.glb   rotate a quarter turn back upright
+#     Terrain_Patch_yup.glb      leave exactly as exported
+#
+# Neither is needed by anything currently in art/models/.
 
-const ZUP_RATIO := 1.2
+const ZUP_ROTATION := Vector3(-PI * 0.5, 0.0, 0.0)
 
 
-static func upright_rotation(box: AABB, model_name: String) -> Vector3:
-	var lower := model_name.to_lower()
-	if lower.ends_with("_yup"):
-		return Vector3.ZERO
+# The filename override, or Vector3.ZERO for "the file already knows".
+static func override_rotation(model_name: String) -> Vector3:
+	var lower := model_name.get_file().to_lower()
 	if lower.ends_with("_zup"):
-		return Vector3(-PI * 0.5, 0.0, 0.0)
-
-	if box.size.z > box.size.y * ZUP_RATIO and box.size.y <= box.size.x:
-		return Vector3(-PI * 0.5, 0.0, 0.0)
+		return ZUP_ROTATION
 	return Vector3.ZERO
 
 
-# A box after a rotation: the eight corners moved, then re-bounded.
+# A model's full correction: what its own node hierarchy says, plus the
+# filename override when one is present.
+static func _correction(info: Dictionary, model_name: String) -> Transform3D:
+	var correction: Transform3D = info.get("correction", Transform3D.IDENTITY)
+	if model_name.get_file().to_lower().ends_with("_yup"):
+		correction = Transform3D.IDENTITY
+	var extra := override_rotation(model_name)
+	if extra != Vector3.ZERO:
+		correction = Transform3D(Basis.from_euler(extra), Vector3.ZERO) * correction
+	return correction
+
+
+static func _mesh_aabb(info: Dictionary) -> AABB:
+	var mesh: Mesh = info.get("mesh")
+	if mesh == null:
+		return AABB()
+	return mesh.get_aabb()
+
+
+# A box after a transform: the eight corners moved, then re-bounded.
 static func rotated_aabb(box: AABB, rotation: Vector3) -> AABB:
 	if rotation == Vector3.ZERO:
 		return box
-
-	var frame := Basis.from_euler(rotation)
-	var first := frame * box.position
-	var out := AABB(first, Vector3.ZERO)
-
-	for i in 8:
-		out = out.expand(frame * box.get_endpoint(i))
-	return out
+	return Transform3D(Basis.from_euler(rotation), Vector3.ZERO) * box
 
 
-# Everything a MultiMesh needs to stand one mesh upright at a given
-# height WITHOUT distorting it: the rotation, one uniform scale, and
-# how far to lift it so its base rests on the ground.
+# Everything a MultiMesh needs to stand one mesh at a given height
+# WITHOUT distorting it: one uniform scale, how far to lift it so its
+# base rests on the ground, and the model's own correction.
 #
 # Uniform is the whole point. Scaling a bench's width and height
 # independently to hit a target height is what turned the props into
-# tall thin slabs lying on their sides.
-static func mesh_fit_upright(mesh: Mesh, model_name: String, target_height: float) -> Dictionary:
-	var raw := mesh.get_aabb()
-	var rotation := upright_rotation(raw, model_name)
-	var box := rotated_aabb(raw, rotation)
+# tall thin slabs.
+static func mesh_fit_upright(info: Dictionary, model_name: String, target_height: float) -> Dictionary:
+	var correction := _correction(info, model_name)
+	var box: AABB = correction * _mesh_aabb(info)
 
 	var scale := 1.0
 	if box.size.y > 0.0001:
 		scale = target_height / box.size.y
 
 	return {
-		"rotation": rotation,
 		"scale": scale,
 		"base": -box.position.y * scale,
 		"size": box.size * scale,
+		"correction": correction,
 	}
 
 
+# Where one copy of a mesh_fit_upright() model goes.
+static func upright_transform(fit: Dictionary, at: Vector3, spin: float) -> Transform3D:
+	var scale := float(fit["scale"])
+	var sized := Basis.IDENTITY.scaled(Vector3(scale, scale, scale))
+	var lift := Vector3(0.0, float(fit["base"]), 0.0)
+	var correction: Transform3D = fit["correction"]
+	return Transform3D(Basis(Vector3.UP, spin), at) * Transform3D(sized, lift) * correction
+
+
 # --- Measuring and fitting -----------------------------------------------
+#
+# EVERY FIT COMPOSES WITH THE MODEL'S OWN TRANSFORM. It never assigns
+# over it.
+#
+# Godot imports a .glb whose scene has a single root node - which is all
+# 34 of the models here - by promoting that node to the scene root. The
+# Y-up conversion, and often a x100 unit conversion with it, lives ON
+# THAT NODE. So the node handed back by spawn_prop() arrives with a
+# meaningful transform already, and the old `node.scale = ...` /
+# `node.rotation = ...` in these functions wiped it out. That is the
+# other half of why the models lay on their sides.
+#
+# The original transform is remembered the first time a model is fitted,
+# so fitting twice cannot compound.
+
+const FRAME_META := "acl_model_frame"
+
+
+# The transform a model came out of its file with.
+static func model_frame(node: Node) -> Transform3D:
+	if not (node is Node3D):
+		return Transform3D.IDENTITY
+	var as_3d: Node3D = node
+	if as_3d.has_meta(FRAME_META):
+		return as_3d.get_meta(FRAME_META)
+	as_3d.set_meta(FRAME_META, as_3d.transform)
+	return as_3d.transform
+
+
+# Turns a model to face a different way WITHOUT throwing its import
+# transform away. `node.rotation.y = yaw` rebuilds the whole basis from
+# euler angles and loses the model's Y-up correction with it; this puts
+# the yaw outside whatever the model already carries.
+static func spin(node: Node3D, yaw: float) -> void:
+	if node == null or is_zero_approx(yaw):
+		return
+	node.transform = Transform3D(Basis(Vector3.UP, yaw), Vector3.ZERO) * node.transform
+
+
+# The same, for a model that also needs nosing up or rolling over.
+static func tilt(node: Node3D, pitch: float, roll: float) -> void:
+	if node == null or (is_zero_approx(pitch) and is_zero_approx(roll)):
+		return
+	var turn := Basis(Vector3.RIGHT, pitch) * Basis(Vector3.FORWARD, roll)
+	node.transform = Transform3D(turn, Vector3.ZERO) * node.transform
+
 
 # The bounding box of everything drawable under `root`, in root space.
 static func combined_aabb(root: Node) -> AABB:
 	return _collect(root, root)
+
+
+# The same box in the model's PARENT space: the geometry with the import
+# transform applied, which is what every fit below actually measures.
+static func _seated_aabb(node: Node3D, frame: Transform3D) -> AABB:
+	return frame * _collect(node, node)
 
 
 static func _collect(node: Node, root: Node) -> AABB:
@@ -540,7 +718,8 @@ static func _collect(node: Node, root: Node) -> AABB:
 
 # Transform of `node` expressed in `root`'s space, walking up the chain
 # rather than relying on global transforms (the model is measured before
-# it enters the tree).
+# it enters the tree). Excludes root's own transform, which is exactly
+# what model_frame() supplies separately.
 static func _relative_transform(node: Node3D, root: Node) -> Transform3D:
 	var result := Transform3D.IDENTITY
 	var current: Node = node
@@ -552,16 +731,21 @@ static func _relative_transform(node: Node3D, root: Node) -> Transform3D:
 	return result
 
 
+# Applies a scale and a lift on top of the model's import transform.
+static func _seat(node: Node3D, frame: Transform3D, scale: Vector3, lift: float) -> void:
+	node.transform = Transform3D(Basis.IDENTITY.scaled(scale), Vector3(0.0, lift, 0.0)) * frame
+
+
 # Rescales the model so it stands `target_height` metres tall, and drops
 # it so its lowest point rests on y = 0. Returns the scale applied.
 static func fit_height(node: Node3D, target_height: float) -> float:
-	var box := _collect(node, node)
+	var frame := model_frame(node)
+	var box := _seated_aabb(node, frame)
 	if box.size.y <= 0.0001:
 		return 1.0
 
 	var factor := target_height / box.size.y
-	node.scale = Vector3(factor, factor, factor)
-	node.position.y -= box.position.y * factor
+	_seat(node, frame, Vector3(factor, factor, factor), -box.position.y * factor)
 	return factor
 
 
@@ -572,7 +756,8 @@ static func fit_height(node: Node3D, target_height: float) -> float:
 # swallows its own street. This keeps the footprint to the lot and lets
 # the height run free, which is what makes a tower a tower.
 static func fit_box(node: Node3D, target_width: float, target_height: float) -> void:
-	var box := _collect(node, node)
+	var frame := model_frame(node)
+	var box := _seated_aabb(node, frame)
 	if box.size.y <= 0.0001:
 		return
 
@@ -582,8 +767,7 @@ static func fit_box(node: Node3D, target_width: float, target_height: float) -> 
 		horizontal = target_width / widest
 	var vertical := target_height / box.size.y
 
-	node.scale = Vector3(horizontal, vertical, horizontal)
-	node.position.y -= box.position.y * vertical
+	_seat(node, frame, Vector3(horizontal, vertical, horizontal), -box.position.y * vertical)
 
 
 # Scales a model uniformly so its longest horizontal axis measures
@@ -591,39 +775,127 @@ static func fit_box(node: Node3D, target_width: float, target_height: float) -> 
 # not be stretched - a vehicle, a character, a prop with proportions
 # that matter.
 static func fit_length(node: Node3D, target_length: float) -> float:
-	var box := _collect(node, node)
+	var frame := model_frame(node)
+	var box := _seated_aabb(node, frame)
 	var longest := maxf(box.size.x, box.size.z)
 	if longest <= 0.0001:
 		return 1.0
 
 	var factor := target_length / longest
-	node.scale = Vector3(factor, factor, factor)
-	node.position.y -= box.position.y * factor
+	_seat(node, frame, Vector3(factor, factor, factor), -box.position.y * factor)
 	return factor
 
 
-# Stands a node upright if it came in Z-up, then fits it to a height
-# WITHOUT distorting it. For props, statues, anything whose proportions
-# are part of the model rather than something to be dictated.
+# Fits an instanced model to a height WITHOUT distorting it. For props,
+# statues, anything whose proportions are part of the model rather than
+# something to be dictated.
+#
+# No guessing here. The import transform is already in `frame`, so this
+# path is upright by construction; only the filename override can add a
+# rotation on top.
 static func fit_upright(node: Node3D, model_name: String, target_height: float) -> void:
-	var raw := _collect(node, node)
-	var rotation := upright_rotation(raw, model_name)
-	node.rotation = rotation
+	var frame := model_frame(node)
+	var extra := override_rotation(model_name)
+	if model_name.get_file().to_lower().ends_with("_yup"):
+		frame = Transform3D.IDENTITY
+	if extra != Vector3.ZERO:
+		frame = Transform3D(Basis.from_euler(extra), Vector3.ZERO) * frame
 
-	var box := rotated_aabb(raw, rotation)
+	var box := _seated_aabb(node, frame)
 	if box.size.y <= 0.0001:
+		node.transform = frame
 		return
 
 	var factor := target_height / box.size.y
-	node.scale = Vector3(factor, factor, factor)
-	node.position.y -= box.position.y * factor
+	_seat(node, frame, Vector3(factor, factor, factor), -box.position.y * factor)
 
 
 # The footprint of a fitted model, for building a collision box that
 # matches whatever was imported.
 static func fitted_size(node: Node3D) -> Vector3:
-	var box := _collect(node, node)
-	return box.size * node.scale
+	return (node.transform * _collect(node, node)).size
+
+
+# --- Outliers --------------------------------------------------------------
+#
+# One stray mesh can make a model unfittable. stadium.glb is the example:
+# sixteen of its seventeen meshes sit between y = 38 and y = 1580, and the
+# seventeenth runs from y = -1362 to y = 3299. Fitting to the full
+# bounding box therefore sized the stadium against a 4661-unit height that
+# only one mesh ever reaches, so the bowl came out at a quarter of the
+# size it should be AND floating sixty metres in the air.
+#
+# The fix is to fit to where the geometry actually IS. Per-mesh boxes are
+# collected and the extremes are trimmed off each axis before the bounds
+# are taken, which is the difference between measuring a stadium and
+# measuring a stadium plus one enormous stray plane.
+
+const DEFAULT_TRIM := 0.12
+
+
+# Every drawable's own box, in the model's parent space.
+static func _mesh_boxes(root: Node3D, frame: Transform3D) -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	_gather_boxes(root, root, boxes)
+	for i in boxes.size():
+		boxes[i] = frame * boxes[i]
+	return boxes
+
+
+static func _gather_boxes(node: Node, root: Node, into: Array[AABB]) -> void:
+	if node is VisualInstance3D:
+		var vis: VisualInstance3D = node
+		var box := vis.get_aabb()
+		if box.size != Vector3.ZERO:
+			into.append(_relative_transform(vis, root) * box)
+	for child in node.get_children():
+		_gather_boxes(child, root, into)
+
+
+# The box holding the BULK of a model, with `trim` of the meshes ignored
+# at each end of each axis. Falls back to the plain bounding box when
+# there are too few meshes for trimming to mean anything.
+static func trimmed_aabb(root: Node3D, trim: float = DEFAULT_TRIM) -> AABB:
+	var frame := model_frame(root)
+	var boxes := _mesh_boxes(root, frame)
+	var count := boxes.size()
+	if count < 4:
+		return _seated_aabb(root, frame)
+
+	var drop := mini(int(floor(float(count) * trim)), (count - 1) / 2)
+
+	var low := Vector3.ZERO
+	var high := Vector3.ZERO
+	for axis in 3:
+		var starts: Array[float] = []
+		var ends: Array[float] = []
+		for box in boxes:
+			starts.append(box.position[axis])
+			ends.append(box.position[axis] + box.size[axis])
+		starts.sort()
+		ends.sort()
+		low[axis] = starts[drop]
+		high[axis] = ends[count - 1 - drop]
+
+	return AABB(low, high - low)
+
+
+# Scales a model uniformly so its longest horizontal axis measures
+# `target_span`, measured across the bulk of its geometry rather than its
+# outliers, and seats that bulk on y = 0. Returns the size it ended up.
+#
+# For the big set pieces - the stadium - where the height is a
+# consequence of the footprint and not something to dictate.
+static func fit_span(node: Node3D, target_span: float) -> Vector3:
+	var frame := model_frame(node)
+	var box := trimmed_aabb(node)
+	var longest := maxf(box.size.x, box.size.z)
+	if longest <= 0.0001:
+		return Vector3.ZERO
+
+	var factor := target_span / longest
+	_seat(node, frame, Vector3(factor, factor, factor), -box.position.y * factor)
+	return box.size * factor
 
 
 # --- Animation -----------------------------------------------------------

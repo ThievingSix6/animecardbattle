@@ -27,24 +27,32 @@ const DEADZONE := 0.22
 const ACTIONS: Array[Dictionary] = [
 	{
 		"name": "acl_forward",
+		"label": "Forward",
+		"group": "On foot",
 		"keys": [KEY_W, KEY_UP],
 		"buttons": [JOY_BUTTON_DPAD_UP],
 		"axis": [[JOY_AXIS_LEFT_Y, -1.0]],
 	},
 	{
 		"name": "acl_back",
+		"label": "Back",
+		"group": "On foot",
 		"keys": [KEY_S, KEY_DOWN],
 		"buttons": [JOY_BUTTON_DPAD_DOWN],
 		"axis": [[JOY_AXIS_LEFT_Y, 1.0]],
 	},
 	{
 		"name": "acl_left",
+		"label": "Left",
+		"group": "On foot",
 		"keys": [KEY_A, KEY_LEFT],
 		"buttons": [JOY_BUTTON_DPAD_LEFT],
 		"axis": [[JOY_AXIS_LEFT_X, -1.0]],
 	},
 	{
 		"name": "acl_right",
+		"label": "Right",
+		"group": "On foot",
 		"keys": [KEY_D, KEY_RIGHT],
 		"buttons": [JOY_BUTTON_DPAD_RIGHT],
 		"axis": [[JOY_AXIS_LEFT_X, 1.0]],
@@ -53,6 +61,8 @@ const ACTIONS: Array[Dictionary] = [
 		# Cross on a PlayStation pad. Godot's JOY_BUTTON_A is the
 		# bottom face button on every controller.
 		"name": "acl_jump",
+		"label": "Jump",
+		"group": "Driving",
 		"keys": [KEY_SPACE],
 		"buttons": [JOY_BUTTON_A],
 		"axis": [],
@@ -62,6 +72,8 @@ const ACTIONS: Array[Dictionary] = [
 		# the interact button, so boost and exit can never be the same
 		# press.
 		"name": "acl_vehicle",
+		"label": "Enter / leave car",
+		"group": "Driving",
 		"keys": [KEY_F, KEY_ENTER, KEY_KP_ENTER],
 		"buttons": [JOY_BUTTON_Y],
 		"axis": [],
@@ -70,6 +82,8 @@ const ACTIONS: Array[Dictionary] = [
 		# Right trigger. A trigger is an axis, not a button, so it reads
 		# as an analogue throttle rather than on-or-off.
 		"name": "acl_throttle",
+		"label": "Throttle",
+		"group": "Driving",
 		"keys": [KEY_W, KEY_UP],
 		"buttons": [],
 		"axis": [[JOY_AXIS_TRIGGER_RIGHT, 1.0]],
@@ -77,6 +91,8 @@ const ACTIONS: Array[Dictionary] = [
 	{
 		# Left trigger: brake, and reverse once stopped.
 		"name": "acl_brake",
+		"label": "Brake / reverse",
+		"group": "Driving",
 		"keys": [KEY_S, KEY_DOWN],
 		"buttons": [],
 		"axis": [[JOY_AXIS_TRIGGER_LEFT, 1.0]],
@@ -84,6 +100,8 @@ const ACTIONS: Array[Dictionary] = [
 	{
 		# On foot only. L3, so it is nowhere near the driving controls.
 		"name": "acl_sprint",
+		"label": "Sprint",
+		"group": "On foot",
 		"keys": [KEY_SHIFT],
 		"buttons": [JOY_BUTTON_LEFT_STICK],
 		"axis": [],
@@ -92,6 +110,8 @@ const ACTIONS: Array[Dictionary] = [
 		# Deliberately not the same button as jump: standing on a portal
 		# pad and jumping should not open the travel menu.
 		"name": "acl_interact",
+		"label": "Interact",
+		"group": "On foot",
 		"keys": [KEY_E, KEY_ENTER, KEY_KP_ENTER],
 		"buttons": [JOY_BUTTON_X],
 		"axis": [],
@@ -100,6 +120,8 @@ const ACTIONS: Array[Dictionary] = [
 		# L1. R1 is powerslide, so the two shoulders are the two things
 		# you hold while cornering.
 		"name": "acl_boost",
+		"label": "Boost",
+		"group": "Driving",
 		"keys": [KEY_SHIFT],
 		"buttons": [JOY_BUTTON_LEFT_SHOULDER],
 		"axis": [],
@@ -108,12 +130,50 @@ const ACTIONS: Array[Dictionary] = [
 		# R1: powerslide on the ground, air roll in the air. One button
 		# for both, the way Rocket League does it.
 		"name": "acl_drift",
+		"label": "Powerslide / air roll",
+		"group": "Driving",
 		"keys": [KEY_CTRL],
 		"buttons": [JOY_BUTTON_RIGHT_SHOULDER],
 		"axis": [],
 	},
 	{
+		# DIRECTIONAL AIR ROLL, Rocket League's "Air Roll Right".
+		# Hold it and the car rolls right on its own; the stick still
+		# pitches and yaws underneath. R1 keeps its powerslide job on the
+		# ground, so the shoulder means "rotate" either way up.
+		"name": "acl_air_roll_right",
+		"label": "Air roll right",
+		"group": "Driving",
+		"keys": [KEY_E],
+		"buttons": [JOY_BUTTON_RIGHT_SHOULDER],
+		"axis": [],
+	},
+	{
+		# Square, the same button as interact. They can never collide:
+		# interact is only read on foot, air roll only with the wheels
+		# off the ground.
+		"name": "acl_air_roll_left",
+		"label": "Air roll left",
+		"group": "Driving",
+		"keys": [KEY_Q],
+		"buttons": [JOY_BUTTON_X],
+		"axis": [],
+	},
+	{
+		# Rocket League's ball camera: right-stick click, and C on a
+		# keyboard. Held or toggled, the view swings round to keep the
+		# ball in frame.
+		"name": "acl_ball_cam",
+		"label": "Ball camera",
+		"group": "Camera",
+		"keys": [KEY_C],
+		"buttons": [JOY_BUTTON_RIGHT_STICK],
+		"axis": [],
+	},
+	{
 		"name": "acl_cancel",
+		"label": "Menu / back",
+		"group": "On foot",
 		"keys": [KEY_ESCAPE],
 		"buttons": [JOY_BUTTON_B],
 		"axis": [],
@@ -122,24 +182,32 @@ const ACTIONS: Array[Dictionary] = [
 	# motion rather than an action.
 	{
 		"name": "acl_look_left",
+		"label": "Look left",
+		"group": "Camera",
 		"keys": [],
 		"buttons": [],
 		"axis": [[JOY_AXIS_RIGHT_X, -1.0]],
 	},
 	{
 		"name": "acl_look_right",
+		"label": "Look right",
+		"group": "Camera",
 		"keys": [],
 		"buttons": [],
 		"axis": [[JOY_AXIS_RIGHT_X, 1.0]],
 	},
 	{
 		"name": "acl_look_up",
+		"label": "Look up",
+		"group": "Camera",
 		"keys": [],
 		"buttons": [],
 		"axis": [[JOY_AXIS_RIGHT_Y, -1.0]],
 	},
 	{
 		"name": "acl_look_down",
+		"label": "Look down",
+		"group": "Camera",
 		"keys": [],
 		"buttons": [],
 		"axis": [[JOY_AXIS_RIGHT_Y, 1.0]],
@@ -150,6 +218,160 @@ const ACTIONS: Array[Dictionary] = [
 func _ready() -> void:
 	for action in ACTIONS:
 		_register(action)
+	apply_saved_bindings()
+
+
+# --- Rebinding -----------------------------------------------------------
+#
+# Every action keeps at most ONE key and ONE controller button that the
+# player can change. Stick axes are not rebindable: a throttle that is a
+# trigger and a look that is the right stick are not things a rebind
+# screen has anything useful to say about, and leaving them alone means
+# rebinding can never take the car's steering away.
+
+# The actions the settings screen offers, in the order it shows them.
+const GROUP_ORDER: Array[String] = ["Driving", "Camera", "On foot"]
+
+
+func rebindable() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for group in GROUP_ORDER:
+		for action in ACTIONS:
+			if str(action.get("group", "")) != group:
+				continue
+			if action["keys"].is_empty() and action["buttons"].is_empty():
+				continue
+			out.append(action)
+	return out
+
+
+# What the player has this action on right now, written the way a
+# settings row wants to read it.
+func binding_text(action_name: String) -> String:
+	var parts: Array[String] = []
+	for event in InputMap.action_get_events(action_name):
+		if event is InputEventKey:
+			var key: InputEventKey = event
+			parts.append(OS.get_keycode_string(
+				DisplayServer.keyboard_get_keycode_from_physical(key.physical_keycode)))
+		elif event is InputEventJoypadButton:
+			var pad: InputEventJoypadButton = event
+			parts.append(button_name(pad.button_index))
+	if parts.is_empty():
+		return "—"
+	return " / ".join(parts)
+
+
+# PlayStation names, because that is the pad the controls were written
+# for and "Square" is a great deal clearer than "Joypad Button 2".
+const BUTTON_NAMES := {
+	JOY_BUTTON_A: "Cross",
+	JOY_BUTTON_B: "Circle",
+	JOY_BUTTON_X: "Square",
+	JOY_BUTTON_Y: "Triangle",
+	JOY_BUTTON_LEFT_SHOULDER: "L1 / LB",
+	JOY_BUTTON_RIGHT_SHOULDER: "R1 / RB",
+	JOY_BUTTON_LEFT_STICK: "L3",
+	JOY_BUTTON_RIGHT_STICK: "R3",
+	JOY_BUTTON_BACK: "Share",
+	JOY_BUTTON_START: "Options",
+	JOY_BUTTON_DPAD_UP: "D-Pad Up",
+	JOY_BUTTON_DPAD_DOWN: "D-Pad Down",
+	JOY_BUTTON_DPAD_LEFT: "D-Pad Left",
+	JOY_BUTTON_DPAD_RIGHT: "D-Pad Right",
+}
+
+
+func button_name(index: int) -> String:
+	if BUTTON_NAMES.has(index):
+		return str(BUTTON_NAMES[index])
+	return "Button %d" % index
+
+
+# Puts `event` on `action_name`, replacing whatever of the same KIND was
+# there. Rebinding a key leaves the controller button alone and the other
+# way round, so one screen can rebind both without either wiping the
+# other out. Returns false for anything that is not a key or a button.
+func rebind(action_name: String, event: InputEvent) -> bool:
+	if not InputMap.has_action(action_name):
+		return false
+
+	var is_key := event is InputEventKey
+	var is_button := event is InputEventJoypadButton
+	if not is_key and not is_button:
+		return false
+
+	for existing in InputMap.action_get_events(action_name):
+		if (is_key and existing is InputEventKey) or (is_button and existing is InputEventJoypadButton):
+			InputMap.action_erase_event(action_name, existing)
+
+	InputMap.action_add_event(action_name, event)
+	_remember(action_name)
+	return true
+
+
+func reset_action(action_name: String) -> void:
+	if InputMap.has_action(action_name):
+		InputMap.erase_action(action_name)
+	for action in ACTIONS:
+		if str(action["name"]) == action_name:
+			_register(action)
+			break
+	Settings.clear_binding(action_name)
+
+
+func reset_all_bindings() -> void:
+	Settings.clear_bindings()
+	for action in ACTIONS:
+		var action_name := str(action["name"])
+		if InputMap.has_action(action_name):
+			InputMap.erase_action(action_name)
+		_register(action)
+
+
+# The first key and the first button currently on an action, written back
+# to Settings so they survive a restart.
+func _remember(action_name: String) -> void:
+	var key := 0
+	var button := -1
+	for event in InputMap.action_get_events(action_name):
+		if key == 0 and event is InputEventKey:
+			key = int((event as InputEventKey).physical_keycode)
+		elif button < 0 and event is InputEventJoypadButton:
+			button = int((event as InputEventJoypadButton).button_index)
+	Settings.set_binding(action_name, key, button)
+
+
+# Replays what the player changed last time over the defaults registered
+# above. Anything they never touched is left exactly as it was.
+func apply_saved_bindings() -> void:
+	for action_name in Settings.bindings:
+		var name_text := str(action_name)
+		if not InputMap.has_action(name_text):
+			continue
+		var entry: Dictionary = Settings.bindings[action_name]
+
+		var key := int(entry.get("key", 0))
+		if key != 0:
+			var key_event := InputEventKey.new()
+			key_event.physical_keycode = key as Key
+			_swap(name_text, key_event)
+
+		var button := int(entry.get("button", -1))
+		if button >= 0:
+			var pad := InputEventJoypadButton.new()
+			pad.button_index = button as JoyButton
+			_swap(name_text, pad)
+
+
+# rebind() without writing back to Settings - used while loading, where
+# writing back would be circular.
+func _swap(action_name: String, event: InputEvent) -> void:
+	var is_key := event is InputEventKey
+	for existing in InputMap.action_get_events(action_name):
+		if (is_key and existing is InputEventKey) or (not is_key and existing is InputEventJoypadButton):
+			InputMap.action_erase_event(action_name, existing)
+	InputMap.action_add_event(action_name, event)
 
 
 func _register(action: Dictionary) -> void:
@@ -205,8 +427,22 @@ func throttle() -> float:
 	return Input.get_action_strength("acl_throttle") - Input.get_action_strength("acl_brake")
 
 
+# Directional air roll: -1 rolling left, +1 rolling right, 0 for neither.
+# Both held cancel out, which is better than picking a winner.
+func air_roll() -> float:
+	var left := Input.is_action_pressed("acl_air_roll_left")
+	var right := Input.is_action_pressed("acl_air_roll_right")
+	if left == right:
+		return 0.0
+	return 1.0 if right else -1.0
+
+
 func cancel_pressed() -> bool:
 	return Input.is_action_just_pressed("acl_cancel")
+
+
+func ball_cam_pressed() -> bool:
+	return Input.is_action_just_pressed("acl_ball_cam")
 
 
 # True while any controller is attached, so prompts can name the right

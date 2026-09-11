@@ -143,6 +143,13 @@ func voice(key: String) -> AudioStreamPlayer:
 	return player
 
 
+# The stream behind a key, for a caller that owns its own voice and
+# swaps what that voice is playing - the crowd, which is one voice
+# alternating between a swell and a gasp.
+func stream_for(key: String) -> AudioStream:
+	return _stream(key)
+
+
 # How long a sound runs, so a chain can be timed off the files
 # themselves rather than off numbers that drift when they are re-cut.
 func length_of(key: String) -> float:

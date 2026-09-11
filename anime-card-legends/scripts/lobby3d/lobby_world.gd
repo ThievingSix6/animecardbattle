@@ -115,6 +115,7 @@ const MOUNTAIN_PASS_ARC := 0.5
 # The ground is drawn as tiles rather than one slab for the same
 # reason: a single huge mesh would try to take every light in the
 # district and silently drop all but eight of them.
+const GROUND_DEPTH := 24.0
 const GROUND_TILES := 8
 
 # Destinations, in the order they are placed around the plaza. "model"
@@ -364,11 +365,17 @@ func _build_ground() -> void:
 				-CITY_HALF + span * (float(tz) + 0.5))
 			ground.add_child(tile)
 
+	# The COLLIDER is far thicker than the slabs you can see. The car
+	# tops out at 184 m/s, which is three metres per physics tick, so a
+	# one-metre-thick floor is something it can be on the far side of in
+	# a single frame. Deep enough that anything moving fast enough to get
+	# past the surface is still inside the box on the next tick, where the
+	# suspension rays can find it and push it back out.
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(CITY_HALF * 2.0, 1.0, CITY_HALF * 2.0)
+	box.size = Vector3(CITY_HALF * 2.0, GROUND_DEPTH, CITY_HALF * 2.0)
 	shape.shape = box
-	shape.position.y = -0.5
+	shape.position.y = -GROUND_DEPTH * 0.5
 	ground.add_child(shape)
 
 	_build_perimeter_wall()
@@ -585,11 +592,11 @@ func _build_skyline() -> void:
 
 	var model := Models.spawn_prop("building")
 	var mesh: Mesh = null
-	var material: Material = null
 
+	var info := {"mesh": null, "correction": Transform3D.IDENTITY}
 	if model != null:
-		mesh = Models.first_mesh(model)
-		material = Models.first_material(model, Models.PROP_FOLDER + "building")
+		info = Models.merged_mesh_info(model, Models.PROP_FOLDER + "building")
+		mesh = info["mesh"]
 		model.queue_free()
 
 	var fallback := mesh == null
@@ -597,6 +604,7 @@ func _build_skyline() -> void:
 		var box := BoxMesh.new()
 		box.size = Vector3(1.0, 1.0, 1.0)
 		mesh = box
+		info = {"mesh": mesh, "correction": Transform3D.IDENTITY}
 
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -608,10 +616,7 @@ func _build_skyline() -> void:
 	# its own height SEPARATELY. Scaling uniformly is what made the old
 	# district a wall of giants: asking for a 50 m tower also gave it a
 	# 50 m footprint, so it swallowed its lot and both its streets.
-	var fit := Models.mesh_fit_box(mesh)
-	var per_width := float(fit["per_width"])
-	var per_height := float(fit["per_height"])
-	var base_lift := float(fit["base"])
+	var fit := Models.mesh_fit_box(info, "building")
 
 	var body := StaticBody3D.new()
 	add_child(body)
@@ -625,10 +630,7 @@ func _build_skyline() -> void:
 		var width := float(spot["width"])
 		var spin := float(spot["spin"])
 
-		var orientation := Basis(Vector3.UP, spin).scaled(
-			Vector3(per_width * width, per_height * height, per_width * width))
-		var origin := at + Vector3(0.0, base_lift * height, 0.0)
-		multi.set_instance_transform(i, Transform3D(orientation, origin))
+		multi.set_instance_transform(i, Models.box_transform(fit, at, spin, width, height))
 
 		if fallback:
 			var shade := Color("#161b28").lerp(Color("#232a3d"), _rng.randf())
@@ -650,9 +652,13 @@ func _build_skyline() -> void:
 
 	var node := MultiMeshInstance3D.new()
 	node.multimesh = multi
-	if material != null:
-		node.material_override = material
-	elif fallback:
+	# NO material_override. The merged mesh carries a material per
+	# surface, and an override would replace all of them with one - which
+	# is what drawing a whole model through one MultiMesh costs if you
+	# are not careful.
+	# The procedural box has no material of its own, so it is the one
+	# case that still needs one.
+	if fallback:
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color.WHITE
 		mat.vertex_color_use_as_albedo = true
@@ -677,8 +683,8 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
-		var material := Models.first_material(sample, Models.PROP_FOLDER + model_name)
+		var info := Models.merged_mesh_info(sample, Models.PROP_FOLDER + model_name)
+		var mesh: Mesh = info["mesh"]
 		sample.queue_free()
 		if mesh == null:
 			continue
@@ -690,10 +696,7 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 		if mine.is_empty():
 			continue
 
-		var fit := Models.mesh_fit_box(mesh)
-		var per_width := float(fit["per_width"])
-		var per_height := float(fit["per_height"])
-		var base_lift := float(fit["base"])
+		var fit := Models.mesh_fit_box(info, model_name)
 
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -707,9 +710,7 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 			var width := float(spot["width"])
 			var spin := float(spot["spin"])
 
-			var orientation := Basis(Vector3.UP, spin).scaled(
-				Vector3(per_width * width, per_height * height, per_width * width))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+			multi.set_instance_transform(i, Models.box_transform(fit, at, spin, width, height))
 
 			var shape := CollisionShape3D.new()
 			var box_shape := BoxShape3D.new()
@@ -725,8 +726,6 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
-		if material != null:
-			node.material_override = material
 		add_child(node)
 
 
@@ -1255,8 +1254,8 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 		if sample == null:
 			continue
 
-		var mesh := Models.first_mesh(sample)
-		var material := Models.first_material(sample, Models.PROP_FOLDER + prop_name)
+		var info := Models.merged_mesh_info(sample, Models.PROP_FOLDER + prop_name)
+		var mesh: Mesh = info["mesh"]
 		sample.queue_free()
 		if mesh == null:
 			continue
@@ -1279,21 +1278,14 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 			var height := float(spot["height"])
 			var spin := float(spot["spin"])
 
-			# Uniform, and stood upright if the model came in Z-up.
+			# Uniform, and carrying the model's own Y-up correction.
 			# Scaling a bench's width and height independently to hit a
-			# target height is what turned these into thin slabs on
-			# their sides.
-			var fit := Models.mesh_fit_upright(mesh, prop_name, height)
-			var scale := float(fit["scale"])
-			var upright: Vector3 = fit["rotation"]
-			var frame := Basis.from_euler(upright)
-			var orientation := Basis(Vector3.UP, spin) * frame.scaled(Vector3(scale, scale, scale))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * float(fit["base"])))
+			# target height is what turned these into thin slabs.
+			var fit := Models.mesh_fit_upright(info, prop_name, height)
+			multi.set_instance_transform(i, Models.upright_transform(fit, at, spin))
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
-		if material != null:
-			node.material_override = material
 		add_child(node)
 
 

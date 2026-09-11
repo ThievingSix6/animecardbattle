@@ -21,21 +21,40 @@ const GOAL_DEPTH_UU := 880.0
 
 const HALF_WIDTH := FIELD_WIDTH_UU * 0.5 * CarBody.UU
 const HALF_LENGTH := FIELD_LENGTH_UU * 0.5 * CarBody.UU
+const FLOOR_DEPTH := 24.0
 const CEILING := FIELD_HEIGHT_UU * CarBody.UU
 const GOAL_HALF_WIDTH := GOAL_WIDTH_UU * 0.5 * CarBody.UU
 const GOAL_HEIGHT := GOAL_HEIGHT_UU * CarBody.UU
 const GOAL_DEPTH := GOAL_DEPTH_UU * CarBody.UU
+
+# --- The stadium model --------------------------------------------------
+# How far the bowl sits back from the ends of the pitch, and then the
+# straight 2x on top of it. One number to turn if it wants to be closer
+# in or further out.
+const STADIUM_MARGIN := 1.2
+const STADIUM_SCALE := 2.0
 
 const MATCH_SECONDS := 300.0
 const KICKOFF_PAUSE := 2.0
 
 # --- Crowd ------------------------------------------------------------
 #
-# soccar_crowd.ogg runs under the whole match, quiet, and swells for a
-# few seconds whenever something happens. The one-shots ride over it.
-const CROWD_BED := 0.35
-const CROWD_SWELL := 1.0
-const CROWD_SETTLE := 0.6      # how fast a swell decays, per second
+# soccar_crowd.ogg is NOT a bed. It used to run under the whole match at
+# a constant level, which turned a stadium full of people into a hiss you
+# stopped hearing within a minute.
+#
+# It is a one-shot now, played when the crowd has a reason - a goal, a
+# big hit - and otherwise at a random quiet moment every so often, the
+# way a real crowd murmurs between passages of play. soccar_gasp is the
+# same: it fires on a near miss, and rarely on its own.
+const CROWD_VOLUME := 0.75
+# A reaction is never cut off by an idle murmur, and two murmurs never
+# stack: one crowd sound at a time.
+const CROWD_GAP_MIN := 22.0
+const CROWD_GAP_MAX := 55.0
+const CROWD_IDLE_VOLUME := 0.3
+# Roughly one idle murmur in five is a gasp rather than a swell.
+const GASP_CHANCE := 0.2
 
 # A shot that beats the keeper and misses the mouth: past the goal line
 # by depth, outside the posts, and travelling.
@@ -48,27 +67,37 @@ const BLUE := Color("#3b82f6")
 const ORANGE := Color("#f5a623")
 
 var car: CarBody
-var bot: CarBody
 var ball: ArenaBall
 var camera: CarCamera
 var hud: ArenaHUD
+var menu: ArenaSettings
+
+# Everyone on the pitch, the player included. In 1v1 that is the player
+# and one bot; in 2v2 it is the player, a teammate and two opponents.
+var blue_team: Array[CarBody] = []
+var orange_team: Array[CarBody] = []
+
+var _brains: Array[ArenaBot] = []
+var _team_size := 1
 
 var _score := {"blue": 0, "orange": 0}
 var _clock := MATCH_SECONDS
 var _kickoff := KICKOFF_PAUSE
 var _over := false
-var _bot_brain: ArenaBot
 
 var _crowd: AudioStreamPlayer
-var _crowd_level := CROWD_BED
+var _crowd_quiet := 0.0
 var _near_miss_cooldown := 0.0
 var _warned := false
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	if not GameState.has_active_slot():
 		call_deferred("_bounce")
 		return
+
+	_rng.randomize()
 
 	Audio.play_music("music_battle")
 	_build_environment()
@@ -139,8 +168,13 @@ func _build_pitch() -> void:
 	# never has to be watertight or match RL's dimensions.
 	_build_stadium_shell()
 
+	# Two metres of visible floor over a much deeper collider: at RL
+	# speeds the car covers three metres in one physics tick, and a thin
+	# floor is a floor it can end up underneath.
 	_slab(body, Vector3(0, -1.0, 0), Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0),
-		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")))
+		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")),
+		Vector3(HALF_WIDTH * 2.0, FLOOR_DEPTH, HALF_LENGTH * 2.0),
+		Vector3(0.0, 1.0 - FLOOR_DEPTH * 0.5, 0.0))
 
 	# Walls. The goal openings are cut by building each end wall as two
 	# posts and a lintel rather than one slab.
@@ -158,15 +192,31 @@ func _build_pitch() -> void:
 	_paint_markings()
 
 
-# The supplied stadium, wrapped around the pitch. Purely visual.
+# The supplied stadium, wrapped around the pitch. Purely visual - the
+# collision boxes above are still what the cars and the ball bounce off.
+#
+# Sized from its FOOTPRINT, not its height, and the footprint is measured
+# across the bulk of the model rather than its full bounding box. One
+# stray mesh in stadium.glb runs four times the height of the actual
+# bowl; fitting to that made the stadium a quarter of the size it should
+# be and floated it sixty metres up, which is why it read as a lump in
+# the middle of the pitch with the cars kicking off outside it.
+#
+# The model's long axis is its X, the pitch's long axis is Z, so it also
+# needs a quarter turn to line the two up.
 func _build_stadium_shell() -> void:
 	var model := Models.spawn_prop("stadium")
 	if model == null:
 		return
 
 	add_child(model)
-	# Sized so the pitch sits inside it rather than the other way round.
-	Models.fit_upright(model, "stadium", CEILING * 1.35)
+
+	# Long enough to swallow the pitch end to end, with room for the
+	# stands to sit back off the touchlines.
+	var span := HALF_LENGTH * 2.0 * STADIUM_MARGIN * STADIUM_SCALE
+	Models.fit_span(model, span)
+	Models.spin(model, PI * 0.5)
+
 	# Dropped a little, so the stands rise from below the pitch surface.
 	model.position.y -= CEILING * 0.08
 
@@ -182,7 +232,11 @@ func _end_wall(body: StaticBody3D, z: float, material: Material) -> void:
 		Vector3(GOAL_HALF_WIDTH * 2.0, CEILING - GOAL_HEIGHT, 2.0), material)
 
 
-func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material) -> void:
+# One piece of the arena shell. The collider is normally the same box you
+# can see, but the floor passes a deeper one so nothing can be driven
+# through it - hence the two optional arguments.
+func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material,
+		collider_size: Vector3 = Vector3.ZERO, collider_at: Vector3 = Vector3.ZERO) -> void:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
@@ -193,9 +247,9 @@ func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material) -
 
 	var shape := CollisionShape3D.new()
 	var collider := BoxShape3D.new()
-	collider.size = size
+	collider.size = size if collider_size == Vector3.ZERO else collider_size
 	shape.shape = collider
-	shape.position = at
+	shape.position = at + collider_at
 	body.add_child(shape)
 
 
@@ -284,26 +338,48 @@ func _on_goal(entered: Node, scorer: String) -> void:
 
 # --- Actors -------------------------------------------------------------
 
+# Blue defends +Z and attacks -Z; orange is the other way round. The
+# player is always blue, and always the first car on the team, so the
+# kickoff spots line up the same way in 1v1 and 2v2.
 func _build_actors() -> void:
 	ball = ArenaBall.create()
 	ball.hit.connect(_on_ball_hit)
 	add_child(ball)
 
-	car = CarBody.create()
-	add_child(car)
-	car.take_control()
+	_team_size = clampi(Settings.team_size, 1, 2)
 
-	bot = CarBody.create()
-	add_child(bot)
+	for i in _team_size:
+		var blue := CarBody.create()
+		add_child(blue)
+		blue_team.append(blue)
+		# The first blue car is the player's; anything after it is a
+		# teammate, and gets a brain like the opposition.
+		if i == 0:
+			car = blue
+			car.take_control()
+		else:
+			_add_brain(blue, HALF_LENGTH, i)
 
-	_bot_brain = ArenaBot.new()
-	_bot_brain.setup(bot, ball, HALF_LENGTH)
-	add_child(_bot_brain)
+		var orange := CarBody.create()
+		add_child(orange)
+		orange_team.append(orange)
+		_add_brain(orange, -HALF_LENGTH, i)
 
 	camera = CarCamera.create(car)
+	camera.ball = ball
 	add_child(camera)
 	camera.activate()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _add_brain(who: CarBody, own_goal_z: float, index: int) -> void:
+	var brain := ArenaBot.new()
+	brain.setup(who, ball, HALF_LENGTH, own_goal_z)
+	# One car challenges, the other covers, so a pair does not both leave
+	# the net at once.
+	brain.role = ArenaBot.ROLE_FIRST if index == 0 else ArenaBot.ROLE_SECOND
+	add_child(brain)
+	_brains.append(brain)
 
 
 func _build_hud() -> void:
@@ -311,39 +387,70 @@ func _build_hud() -> void:
 	add_child(hud)
 	hud.set_score(0, 0)
 
-	_crowd = Audio.loop("soccar_crowd")
-	_apply_crowd()
+	_crowd = Audio.voice("soccar_crowd")
+	_hold_crowd()
+
+	menu = ArenaSettings.new()
+	menu.leave_requested.connect(_leave)
+	menu.restart_requested.connect(_restart)
+	add_child(menu)
 
 
 # --- Match flow ---------------------------------------------------------
+
+# RL's kickoff spots: dead centre in a 1v1, and the two diagonals in a
+# 2v2. Every car faces the middle.
+const KICKOFF_SPREAD := 0.29    # across the pitch, as a fraction of half its width
+const KICKOFF_BACK := 0.62      # down the pitch, as a fraction of half its length
+const KICKOFF_BACK_WIDE := 0.72
+
+
+func _kickoff_spots(count: int) -> Array[Vector3]:
+	if count < 2:
+		return [Vector3(0.0, 0.0, HALF_LENGTH * KICKOFF_BACK)]
+	return [
+		Vector3(-HALF_WIDTH * KICKOFF_SPREAD, 0.0, HALF_LENGTH * KICKOFF_BACK_WIDE),
+		Vector3(HALF_WIDTH * KICKOFF_SPREAD, 0.0, HALF_LENGTH * KICKOFF_BACK_WIDE),
+	]
+
 
 func _kick_off() -> void:
 	_kickoff = KICKOFF_PAUSE
 	ball.reset_to(Vector3(0, ArenaBall.RADIUS * 1.2, 0))
 	Audio.play("soccar_lets_go")
 
-	car.global_position = Vector3(0, car.ride_height() + 0.5, HALF_LENGTH * 0.62)
-	car.linear_velocity = Vector3.ZERO
-	car.angular_velocity = Vector3.ZERO
-	car.global_rotation = Vector3(0, 0, 0)
-	car.boost = CarBody.BOOST_MAX
+	var spots := _kickoff_spots(_team_size)
+	for i in blue_team.size():
+		_place(blue_team[i], spots[i % spots.size()], 1.0)
+	for i in orange_team.size():
+		_place(orange_team[i], spots[i % spots.size()], -1.0)
 
-	bot.global_position = Vector3(0, bot.ride_height() + 0.5, -HALF_LENGTH * 0.62)
-	bot.linear_velocity = Vector3.ZERO
-	bot.angular_velocity = Vector3.ZERO
-	bot.global_rotation = Vector3(0, PI, 0)
-	bot.boost = CarBody.BOOST_MAX
+
+# `side` is +1 for blue, which defends +Z, and -1 for orange. Mirroring
+# the spot rather than listing both sets keeps the two ends identical.
+func _place(who: CarBody, spot: Vector3, side: float) -> void:
+	who.global_position = Vector3(
+		spot.x * side, who.ride_height() + 0.5, spot.z * side)
+	who.linear_velocity = Vector3.ZERO
+	who.angular_velocity = Vector3.ZERO
+	var facing := 0.0 if side > 0.0 else PI
+	who.global_rotation = Vector3(0.0, facing, 0.0)
+	who.boost = CarBody.BOOST_MAX
 
 
 func _process(delta: float) -> void:
 	if _over or car == null:
 		return
 
+	if menu != null and menu.is_open():
+		return
+
 	if _kickoff > 0.0:
 		_kickoff -= delta
 		var live := _kickoff <= 0.0
 		car.driver_seated = live
-		_bot_brain.active = live
+		for brain in _brains:
+			brain.active = live
 		if hud != null:
 			hud.announce("" if live else "KICKOFF")
 
@@ -360,20 +467,23 @@ func _process(delta: float) -> void:
 			hud.announce("30 SECONDS")
 
 	_watch_for_near_miss(delta)
-	_settle_crowd(delta)
+	_idle_crowd(delta)
 
 	if _clock <= 0.0:
 		_finish()
 		return
 
-	if Controls.cancel_pressed():
-		_leave()
+	# Escape opens the menu rather than walking straight out of a match
+	# you are in the middle of. Leaving is one of its buttons.
+	if Controls.cancel_pressed() and menu != null:
+		menu.open()
 
 
 func _finish() -> void:
 	_over = true
 	car.driver_seated = false
-	_bot_brain.active = false
+	for brain in _brains:
+		brain.active = false
 
 	var blue := int(_score["blue"])
 	var orange := int(_score["orange"])
@@ -422,22 +532,55 @@ func _watch_for_near_miss(delta: float) -> void:
 	_swell(0.5)
 
 
+# The crowd reacting to something that just happened. Loud, and it resets
+# the idle timer so a murmur cannot follow straight on its heels.
 func _swell(amount: float = 1.0) -> void:
-	_crowd_level = maxf(_crowd_level, CROWD_BED + (CROWD_SWELL - CROWD_BED) * amount)
-	_apply_crowd()
+	_play_crowd("soccar_crowd", CROWD_VOLUME * (0.55 + 0.45 * amount))
 
 
-func _settle_crowd(delta: float) -> void:
-	if _crowd_level <= CROWD_BED:
+# Between reactions the crowd is heard now and then and not otherwise.
+# Half a minute or so of nothing is the point: it is what makes the next
+# reaction land.
+func _idle_crowd(delta: float) -> void:
+	_crowd_quiet -= delta
+	if _crowd_quiet > 0.0:
 		return
-	_crowd_level = maxf(CROWD_BED, _crowd_level - CROWD_SETTLE * delta)
-	_apply_crowd()
 
-
-func _apply_crowd() -> void:
-	if _crowd == null:
+	_hold_crowd()
+	if _crowd != null and _crowd.playing:
 		return
-	_crowd.volume_db = linear_to_db(maxf(0.0001, _crowd_level * Settings.sfx_volume))
+
+	var key := "soccar_crowd"
+	if _rng.randf() < GASP_CHANCE:
+		key = "soccar_gasp"
+	_play_crowd(key, CROWD_IDLE_VOLUME)
+
+
+# Quiet again until somewhere between CROWD_GAP_MIN and CROWD_GAP_MAX
+# from now, so the murmurs never fall into a rhythm.
+func _hold_crowd() -> void:
+	_crowd_quiet = _rng.randf_range(CROWD_GAP_MIN, CROWD_GAP_MAX)
+
+
+func _play_crowd(key: String, loudness: float) -> void:
+	if _crowd == null or not is_instance_valid(_crowd):
+		return
+	_hold_crowd()
+
+	var stream := Audio.stream_for(key)
+	if stream == null:
+		return
+	_crowd.stream = stream
+	_crowd.volume_db = linear_to_db(maxf(0.0001, loudness * Settings.sfx_volume))
+	_crowd.play()
+
+
+# Changing the team size mid-match means a different number of cars on
+# the pitch, so the match starts again rather than trying to grow a team
+# out from under the player.
+func _restart() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().reload_current_scene()
 
 
 func _leave() -> void:
