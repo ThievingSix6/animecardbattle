@@ -106,6 +106,12 @@ const MAX_NEON_SIGNS := 40
 # lights, so real lights are spent, not scattered.
 const NEON_LIGHT_EVERY := 3
 
+# The way out to the stadium: a gap in the wall and a pass through the
+# mountains, both on this heading.
+const STADIUM_HEADING := Vector3(0.0, 0.0, -1.0)
+const STADIUM_GATE_WIDTH := 90.0
+const MOUNTAIN_PASS_ARC := 0.5
+
 # The ground is drawn as tiles rather than one slab for the same
 # reason: a single huge mesh would try to take every light in the
 # district and silently drop all but eight of them.
@@ -144,6 +150,7 @@ var hud: LobbyHUD
 var portal: Portal
 var car: CarBody
 var car_camera: CarCamera
+var grounds: StadiumGrounds
 
 # True while the player is behind the wheel rather than on foot.
 var _driving := false
@@ -179,6 +186,7 @@ func _ready() -> void:
 	_build_parks()
 	_build_scatter()
 	_build_portal()
+	_build_stadium_road()
 	_build_npcs()
 	_build_car()
 	_build_player()
@@ -211,10 +219,29 @@ func _process(_delta: float) -> void:
 func _update_driving() -> void:
 	if hud != null:
 		hud.show_boost(car.boost_fraction(), car.speed())
+
+	# Driving to the stadium should get you into the stadium - it is a
+	# road, and a road you have to park at the end of is a cul-de-sac.
+	if grounds != null and hud != null:
+		var at_marker := Vector2(car.global_position.x, car.global_position.z).distance_to(
+			Vector2(grounds.marker_position.x, grounds.marker_position.z)) < grounds.interaction_radius()
+		if at_marker:
+			hud.show_prompt("Press %s to enter the Rocket Arena" % Controls.interact_prompt())
+			if Controls.interact_pressed():
+				_enter_arena()
+				return
+		else:
+			hud.hide_prompt()
+
 	# Triangle only. Cancel used to work too, which meant Circle both
 	# boosted and got out of the car.
 	if Controls.vehicle_pressed():
 		_exit_car()
+
+
+func _enter_arena() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Routes.enter(self, Routes.ARENA, Routes.LOBBY)
 
 
 func _interact() -> void:
@@ -228,6 +255,8 @@ func _interact() -> void:
 			_talk_to(str(_current["npc"]))
 		"car":
 			_enter_car()
+		"stadium":
+			_enter_arena()
 		_:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			# Leaving a shop drops the player back on its doorstep, not
@@ -304,7 +333,9 @@ func _build_environment() -> void:
 # Mountains so the district ends in a skyline rather than the void, and
 # a purple haze dome over the lot.
 func _build_horizon() -> void:
-	var horizon := Horizon.create(CITY_HALF)
+	# A pass is cut through both mountain rings so the causeway to the
+	# stadium has somewhere to run.
+	var horizon := Horizon.with_pass(CITY_HALF, STADIUM_HEADING, MOUNTAIN_PASS_ARC)
 	add_child(horizon)
 
 
@@ -350,6 +381,13 @@ func _build_perimeter_wall() -> void:
 		Vector3(-CITY_HALF, 8, 0), Vector3(CITY_HALF, 8, 0),
 	]
 	for i in sides.size():
+		# The side the causeway leaves through is built as two stubs
+		# with a gate between them.
+		var gate := (i == 0 and STADIUM_HEADING.z < 0.0) or (i == 1 and STADIUM_HEADING.z > 0.0)
+		if gate:
+			_build_gate_wall(sides[i])
+			continue
+
 		var body := StaticBody3D.new()
 		body.position = sides[i]
 
@@ -362,6 +400,24 @@ func _build_perimeter_wall() -> void:
 		shape.shape = box
 		body.add_child(shape)
 		add_child(body)
+
+
+# Two stubs with a gap between them, wide enough to drive through.
+func _build_gate_wall(at: Vector3) -> void:
+	var stub := CITY_HALF - STADIUM_GATE_WIDTH * 0.5
+	var offset := STADIUM_GATE_WIDTH * 0.5 + stub * 0.5
+
+	var sides: Array[float] = [-1.0, 1.0]
+	for side in sides:
+		var body := StaticBody3D.new()
+		body.position = at + Vector3(side * offset, 0.0, 0.0)
+		add_child(body)
+
+		var shape := CollisionShape3D.new()
+		var box := BoxShape3D.new()
+		box.size = Vector3(stub, 24.0, 2.0)
+		shape.shape = box
+		body.add_child(shape)
 
 
 # Lit road surface on the grid lines, plus the plaza. Purely visual -
@@ -1339,6 +1395,23 @@ func _exit_car() -> void:
 	Audio.play("click")
 
 
+# --- The stadium road -----------------------------------------------------
+
+func _build_stadium_road() -> void:
+	grounds = StadiumGrounds.create(CITY_HALF, STADIUM_HEADING)
+	add_child(grounds)
+
+	_spots.append({
+		"kind": "stadium",
+		"name": "Rocket Arena",
+		"route": Routes.ARENA,
+		"pos": Vector3.ZERO,
+		"radius": grounds.interaction_radius(),
+		"pad": null,
+		"base_color": Color("#ff6b35"),
+	})
+
+
 # --- People --------------------------------------------------------------
 
 func _build_npcs() -> void:
@@ -1495,6 +1568,8 @@ func _update_proximity() -> void:
 				spot_pos = npc.position
 		elif kind == "car" and car != null:
 			spot_pos = car.global_position
+		elif kind == "stadium" and grounds != null:
+			spot_pos = grounds.marker_position
 
 		var distance := flat_player.distance_to(Vector2(spot_pos.x, spot_pos.z))
 		var radius: float = spot["radius"]
@@ -1521,6 +1596,8 @@ func _update_proximity() -> void:
 			hud.show_prompt("Press %s to talk to %s" % [key, str(closest["name"])])
 		"car":
 			hud.show_prompt("Press %s to drive" % Controls.vehicle_prompt())
+		"stadium":
+			hud.show_prompt("Press %s to enter the Rocket Arena" % key)
 		_:
 			hud.show_prompt("Press %s to visit %s" % [key, str(closest["name"])])
 
@@ -1531,7 +1608,7 @@ func _set_spot_active(spot: Dictionary, active: bool) -> void:
 			if portal != null:
 				portal.set_active(active)
 			return
-		"npc", "car":
+		"npc", "car", "stadium":
 			return
 
 	var pad: MeshInstance3D = spot["pad"]

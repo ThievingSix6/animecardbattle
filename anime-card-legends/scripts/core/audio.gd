@@ -83,6 +83,51 @@ func play(key: String, pitch: float = 1.0) -> void:
 			return
 
 
+# The same as play(), with the volume scaled - for a sound whose
+# loudness is part of the event rather than a fixed level. A ball
+# nudged should not sound like a ball rocketed.
+func play_at(key: String, loudness: float, pitch: float = 1.0) -> void:
+	var stream := _stream(key)
+	if stream == null:
+		return
+
+	var level := sfx_volume * clampf(loudness, 0.0, 1.0)
+	for voice in _voices:
+		if not voice.playing:
+			voice.stream = stream
+			voice.pitch_scale = pitch
+			voice.volume_db = linear_to_db(maxf(0.001, level))
+			voice.play()
+			return
+
+
+# A looping voice for something continuous - an engine. Returns the
+# player so the caller can keep tuning its pitch and volume, and null
+# when the sound is not on disk, so a missing engine loop is silence
+# rather than a crash.
+func loop(key: String) -> AudioStreamPlayer:
+	var stream := _stream(key)
+	if stream == null:
+		return null
+
+	var voice := AudioStreamPlayer.new()
+	voice.stream = stream
+	voice.volume_db = linear_to_db(0.001)
+	add_child(voice)
+
+	# Streams do not loop unless they are told to, and which property
+	# says so depends on the format.
+	if stream is AudioStreamOggVorbis:
+		(stream as AudioStreamOggVorbis).loop = true
+	elif stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = true
+	elif stream is AudioStreamWAV:
+		(stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+
+	voice.play()
+	return voice
+
+
 func play_music(key: String) -> void:
 	if _current_music == key:
 		return

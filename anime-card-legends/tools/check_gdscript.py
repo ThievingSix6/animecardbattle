@@ -114,7 +114,10 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
             # result of `round(...)` is Variant however deeply it is
             # nested, and that poisons the whole inference.
             bare = strip_casts(rhs)
-            if re.search(r"\b(" + "|".join(VARIANT_FUNCS) + r")\s*\(", bare):
+            # (?<![.\w]) not \b: a method call like Vector3.lerp() or
+            # Color.lerp() returns its own type, and only the GLOBAL
+            # built-ins of these names return Variant.
+            if re.search(r"(?<![.\w])(" + "|".join(VARIANT_FUNCS) + r")\s*\(", bare):
                 add(rel, i, "VARIANT-INFER", line)
                 continue
             if re.search(r"\.get\(|\w+\[\"", rhs):

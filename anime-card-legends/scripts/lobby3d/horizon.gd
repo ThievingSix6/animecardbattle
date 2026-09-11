@@ -38,10 +38,23 @@ var city_half := 368.0
 var rock_tint := Color("#241c33")
 var glow := Color("#b04cff")
 
+# The pass the causeway runs through. Peaks inside this arc are left
+# out, so the road out of the city has somewhere to go.
+var gap_direction := Vector3.ZERO
+var gap_arc := 0.0
+
 
 static func create(half_width: float) -> Horizon:
 	var horizon := Horizon.new()
 	horizon.city_half = half_width
+	return horizon
+
+
+# Cuts a pass through both rings, centred on `direction`.
+static func with_pass(half_width: float, direction: Vector3, arc: float) -> Horizon:
+	var horizon := create(half_width)
+	horizon.gap_direction = direction.normalized()
+	horizon.gap_arc = arc
 	return horizon
 
 
@@ -164,6 +177,16 @@ func _plan_peaks() -> Array[Dictionary]:
 	return out
 
 
+# Is this peak inside the arc the causeway needs?
+func _in_pass(at: Vector3) -> bool:
+	if gap_arc <= 0.0 or gap_direction == Vector3.ZERO:
+		return false
+	var flat := Vector3(at.x, 0.0, at.z)
+	if flat.length() < 0.001:
+		return false
+	return flat.normalized().angle_to(gap_direction) < gap_arc * 0.5
+
+
 func _ring(rng: RandomNumberGenerator, count: int, radius_scale: float,
 		height_scale: float, phase: float) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -176,6 +199,10 @@ func _ring(rng: RandomNumberGenerator, count: int, radius_scale: float,
 			cos(angle) * radius + rng.randf_range(-jitter, jitter),
 			-city_half * 0.02,
 			sin(angle) * radius + rng.randf_range(-jitter, jitter))
+
+		# Inside the pass, so the causeway is not blocked by a mountain.
+		if _in_pass(at):
+			continue
 
 		var height := city_half * height_scale * rng.randf_range(0.55, 1.35)
 		out.append({
@@ -243,7 +270,7 @@ func _haze_gradient() -> GradientTexture2D:
 func _build_ground_beyond() -> void:
 	var plain := MeshInstance3D.new()
 	var disc := CylinderMesh.new()
-	disc.top_radius = city_half * FAR_RADIUS * 1.35
+	disc.top_radius = city_half * FAR_RADIUS * 2.4
 	disc.bottom_radius = disc.top_radius
 	disc.height = 2.0
 	disc.radial_segments = 48

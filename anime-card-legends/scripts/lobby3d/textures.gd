@@ -102,3 +102,43 @@ static func grass(world_size: float, tint: Color) -> StandardMaterial3D:
 
 static func rock(world_size: float, tint: Color) -> StandardMaterial3D:
 	return material("rock", world_size, tint, ROCK_TILE, 0.85, 0.0)
+
+
+# --- Campaign zones --------------------------------------------------------
+#
+# Each zone can have its own ground and stone, so Emberfall is not the
+# same rock as the Verdant Hollow with a different light on it:
+#
+#   res://art/textures/zones/emberfall_ground.png
+#   res://art/textures/zones/emberfall_stone.png
+#
+# Anything a zone does not supply falls back to the shared grass/rock,
+# and then to the zone's own palette colour - so one zone can be
+# textured without doing all six.
+
+const ZONE_GROUND_TILE := 22.0
+const ZONE_STONE_TILE := 14.0
+
+
+static func zone_ground(zone_id: String, world_size: float, tint: Color) -> StandardMaterial3D:
+	var named := "zones/" + zone_id + "_ground"
+	if has(named):
+		return material(named, world_size, tint, ZONE_GROUND_TILE, 0.9, 0.0)
+	return grass(world_size, tint)
+
+
+static func zone_stone(zone_id: String, world_size: float, tint: Color) -> StandardMaterial3D:
+	var named := "zones/" + zone_id + "_stone"
+	if has(named):
+		return material(named, world_size, tint, ZONE_STONE_TILE, 0.8, 0.05)
+	return rock(world_size, tint)
+
+
+# Which zones have supplied textures, for the asset report.
+static func zones_with_textures() -> Array[String]:
+	var out: Array[String] = []
+	for zone in Campaign.ZONES:
+		var id := str(zone["id"])
+		if has("zones/" + id + "_ground") or has("zones/" + id + "_stone"):
+			out.append(id)
+	return out

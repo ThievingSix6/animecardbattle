@@ -113,6 +113,12 @@ func _build_pitch() -> void:
 	var body := StaticBody3D.new()
 	add_child(body)
 
+	# res://art/models/props/stadium.glb is dropped in as the stands and
+	# the roof - scenery around the pitch. The collision box below is
+	# still what the ball and the cars actually bounce off, so the model
+	# never has to be watertight or match RL's dimensions.
+	_build_stadium_shell()
+
 	_slab(body, Vector3(0, -1.0, 0), Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0),
 		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")))
 
@@ -130,6 +136,19 @@ func _build_pitch() -> void:
 		Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0), wall)
 
 	_paint_markings()
+
+
+# The supplied stadium, wrapped around the pitch. Purely visual.
+func _build_stadium_shell() -> void:
+	var model := Models.spawn_prop("stadium")
+	if model == null:
+		return
+
+	add_child(model)
+	# Sized so the pitch sits inside it rather than the other way round.
+	Models.fit_upright(model, "stadium", CEILING * 1.35)
+	# Dropped a little, so the stands rise from below the pitch surface.
+	model.position.y -= CEILING * 0.08
 
 
 # Two posts and a lintel, leaving the goal mouth open.
@@ -338,4 +357,4 @@ func _finish() -> void:
 
 func _leave() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	get_tree().change_scene_to_file(Routes.LOBBY)
+	get_tree().change_scene_to_file(Routes.back_to_hub())

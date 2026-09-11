@@ -23,6 +23,12 @@ const MAX_SPEED := MAX_SPEED_UU * CarBody.UU
 
 var _glow: OmniLight3D
 
+# Below this a touch is a nudge, not a hit worth a sound.
+const HIT_SPEED := 6.0
+const HIT_COOLDOWN := 0.08
+var _hit_cooldown := 0.0
+var _last_velocity := Vector3.ZERO
+
 
 static func create() -> ArenaBall:
 	return ArenaBall.new()
@@ -46,6 +52,11 @@ func _ready() -> void:
 	sphere.radius = RADIUS
 	shape.shape = sphere
 	add_child(shape)
+
+	# Needed for contact_monitor to report anything.
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_contact)
 
 	_build_skin()
 
@@ -89,11 +100,30 @@ func _build_glow() -> void:
 	add_child(_glow)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	# RL caps the ball rather than letting a stack of hits run away with
 	# it; without this a boosted flip can put it into orbit.
 	if linear_velocity.length() > MAX_SPEED:
 		linear_velocity = linear_velocity.normalized() * MAX_SPEED
+
+	_hit_cooldown = maxf(0.0, _hit_cooldown - delta)
+	_last_velocity = linear_velocity
+
+
+# res://audio/ball_hit.ogg, at a volume set by how much the impact
+# actually changed the ball's velocity - so a gentle dribble is quiet
+# and a boosted flip is not.
+func _on_contact(_body: Node) -> void:
+	if _hit_cooldown > 0.0:
+		return
+	_hit_cooldown = HIT_COOLDOWN
+
+	var change := (linear_velocity - _last_velocity).length()
+	if change < HIT_SPEED:
+		return
+
+	var force := clampf(change / (MAX_SPEED * 0.35), 0.15, 1.0)
+	Audio.play_at("ball_hit", force)
 
 
 func reset_to(at: Vector3) -> void:

@@ -73,3 +73,21 @@ of scripts/lobby3d/models.gd.
 Settings > Assets lists which models loaded and which found an
 emissive map, so a misnamed file is visible instead of silently
 ignored.
+
+
+THE STADIUM
+-----------
+
+  stadium.glb    the Rocket Arena
+
+Used twice, from one file: as the landmark at the end of the causeway
+out of the city, and as the stands around the pitch once you are
+inside.
+
+It is scenery in both places - the pitch's own walls, goals and
+collision are generated to Rocket League's dimensions, so the model
+never has to be watertight, correctly scaled, or match the field. Make
+it look right; the game handles the geometry that matters.
+
+Scale and origin do not matter. If it comes in lying down it is stood
+upright automatically - see the Z-up note under SCATTER PROPS.

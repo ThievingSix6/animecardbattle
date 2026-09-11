@@ -1,34 +1,46 @@
-SOUNDS
-======
+SOUND
+=====
 
-Drop .ogg (preferred), .wav or .mp3 files here. Named exactly as below,
-they hook themselves up. All optional - add them one at a time.
+Drop .ogg, .wav or .mp3 files in here, named exactly. Anything missing
+is silence - nothing breaks for want of a sound.
 
-  UI
-    click.ogg              button press
-    hover.ogg              button hover
-    coin.ogg               currency gained
+UI AND CARDS
+  click            buttons
+  hover            mouse over a button
+  coin             gold earned
+  summon           a pull
+  reveal_common    a card turning over, by rarity
+  reveal_legendary
+  reveal_secret
+  levelup
+  hit              a strike lands in battle
+  ultimate
+  victory
+  defeat
 
-  SUMMONING
-    summon.ogg             a pull begins
-    reveal_common.ogg      Common / Uncommon card revealed
-    reveal_rare.ogg        Rare / Epic revealed
-    reveal_legendary.ogg   Legendary / Mythic revealed
-    reveal_secret.ogg      Secret / Awakened revealed  (make this one big)
+MUSIC (looped, one at a time)
+  music_menu       title and menus
+  music_lobby      the city
+  music_battle     fights and the arena
 
-  BATTLE
-    hit.ogg                an attack lands (auto pitch-varied)
-    ultimate.ogg           an ultimate fires
-    victory.ogg            floor cleared
-    defeat.ogg             battle lost
+THE CAR AND THE ARENA
+  engine           LOOPED. Pitch tracks speed (0.7x idle to 2.1x flat
+                   out) and volume tracks the throttle, so record a
+                   steady mid-range note rather than a rev - the game
+                   does the revving. A second or two is plenty.
+  boost            LOOPED. Fades in and out with the flame.
+  ball_hit         Played on contact, at a volume set by how much the
+                   impact actually changed the ball's velocity, so one
+                   recording covers a dribble and a boosted flip.
 
-  PROGRESSION
-    levelup.ogg            talent upgraded
+Looping is set in code, not in the import settings, so a plain export
+works - no need to mark loop points.
 
-  MUSIC (loops automatically)
-    music_menu.ogg
-    music_battle.ogg
-    music_lobby.ogg
+.ogg is the one to prefer: it loops cleanly and stays small.
 
-Free sources: freesound.org (check the license per sound),
-kenney.nl/assets (CC0 UI + impact packs), pixabay.com/sound-effects.
+
+WHERE TO GET THEM
+-----------------
+
+freesound.org (check each licence) and Kenney.nl (CC0, no credit
+required) both have engine loops and impacts.

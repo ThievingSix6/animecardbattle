@@ -163,10 +163,10 @@ func _build_ground() -> void:
 	mesh.mesh = disc
 	mesh.position.y = -0.5
 
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(str(zone["ground"]))
-	mat.roughness = 0.95
-	mesh.material_override = mat
+	# res://art/textures/zones/<id>_ground.png when it exists, tinted by
+	# the zone's palette so a supplied texture still belongs here.
+	mesh.material_override = Textures.zone_ground(
+		_zone_id(), GROUND_RADIUS, Color(str(zone["ground"])))
 	ground.add_child(mesh)
 
 	var shape := CollisionShape3D.new()
@@ -442,11 +442,15 @@ func _build_prop(kind: String, origin: Vector3, rng: RandomNumberGenerator) -> v
 			_prop_crystal(root, rng)
 
 
+# A zone's own stone from res://art/textures/zones/<id>_stone.png,
+# tinted by its palette so a supplied texture still belongs here.
+func _zone_id() -> String:
+	return str(zone["id"])
+
+
 func _stone_material(darken: float) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(str(zone["ground"])).lerp(Color.WHITE, darken)
-	mat.roughness = 0.9
-	return mat
+	return Textures.zone_stone(
+		_zone_id(), 24.0, Color(str(zone["ground"])).lerp(Color.WHITE, darken))
 
 
 func _glow_material(energy: float) -> StandardMaterial3D:

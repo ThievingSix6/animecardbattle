@@ -134,6 +134,16 @@ var _recovering := 0.0
 
 var _trails: Array[CPUParticles3D] = []
 
+# res://audio/engine.ogg and boost.ogg, both optional. The engine's
+# pitch and volume follow the throttle and the speed; the boost fades
+# in and out with the flame rather than clicking on.
+var _engine: AudioStreamPlayer
+var _boost_voice: AudioStreamPlayer
+const ENGINE_PITCH_IDLE := 0.7
+const ENGINE_PITCH_MAX := 2.1
+const ENGINE_VOLUME := 0.5
+const SOUND_FADE := 6.0
+
 
 static func create() -> CarBody:
 	return CarBody.new()
@@ -156,6 +166,9 @@ func _ready() -> void:
 	_build_shell()
 	_build_suspension()
 	_build_trails()
+
+	_engine = Audio.loop("engine")
+	_boost_voice = Audio.loop("boost")
 
 
 func ride_height() -> float:
@@ -307,6 +320,10 @@ func take_control() -> void:
 func release_control() -> void:
 	driver_seated = false
 	_set_boosting(false)
+	if _engine != null:
+		_engine.volume_db = linear_to_db(0.0001)
+	if _boost_voice != null:
+		_boost_voice.volume_db = linear_to_db(0.0001)
 
 
 func speed() -> float:
@@ -379,6 +396,7 @@ func _physics_process(delta: float) -> void:
 
 	_apply_boost(boosting, delta)
 	_handle_jump(delta)
+	_update_sound(throttle, boosting, delta)
 
 	if _flip_lock > 0.0:
 		_flip_lock -= delta
@@ -654,6 +672,30 @@ func _apply_boost(boosting: bool, delta: float) -> void:
 
 	boost = minf(BOOST_MAX, boost + BOOST_REGEN * delta)
 	_set_boosting(false)
+
+
+# Engine pitch tracks speed, its volume tracks the throttle, and both
+# fade rather than switch - an engine that snaps to silence the moment
+# the stick centres sounds broken.
+func _update_sound(throttle: float, boosting: bool, delta: float) -> void:
+	var fraction := clampf(speed() / MAX_SPEED, 0.0, 1.0)
+
+	if _engine != null:
+		_engine.pitch_scale = lerpf(ENGINE_PITCH_IDLE, ENGINE_PITCH_MAX, fraction)
+		var wanted := ENGINE_VOLUME * (0.35 + 0.65 * absf(throttle))
+		_fade(_engine, wanted * Settings.sfx_volume, delta)
+
+	if _boost_voice != null:
+		var boost_level := 0.0
+		if boosting:
+			boost_level = Settings.sfx_volume
+		_fade(_boost_voice, boost_level, delta)
+
+
+func _fade(voice: AudioStreamPlayer, target: float, delta: float) -> void:
+	var current := db_to_linear(voice.volume_db)
+	var next := lerpf(current, target, clampf(SOUND_FADE * delta, 0.0, 1.0))
+	voice.volume_db = linear_to_db(maxf(0.0001, next))
 
 
 func _set_boosting(on: bool) -> void:
