@@ -114,6 +114,24 @@ const BOOST_REGEN := 9.0
 
 # Metres, derived once.
 const RIDE_HEIGHT := RIDE_HEIGHT_UU * UU
+
+# --- Suspension geometry, all in metres --------------------------------
+# How far above the body origin each ray begins. A full ride height, so
+# the ray starts at roughly the car's floor and the origin has somewhere
+# to sink to before the ray's own start point goes underground.
+const RAY_LIFT := RIDE_HEIGHT
+# Ray start to wheel contact with the spring at rest.
+const REST_LENGTH := RAY_LIFT + RIDE_HEIGHT
+# Plus room for the suspension to droop before the ray gives up.
+const RAY_LENGTH := REST_LENGTH + RIDE_HEIGHT * 1.5
+
+# The un-burying probe: how far above the origin it starts and how far
+# down it reaches. The lift only has to beat one physics frame of falling.
+const PROBE_LIFT := RIDE_HEIGHT * 4.0
+const PROBE_REACH := RIDE_HEIGHT * 4.0
+# A surface within this of the origin is the road the car is sitting on,
+# not a ceiling it is buried under.
+const SURFACE_SLACK := RIDE_HEIGHT * 0.25
 const MAX_SPEED := RL_MAX_SPEED * UU
 const MAX_SPEED_NO_BOOST := RL_MAX_SPEED_NO_BOOST * UU
 
@@ -122,6 +140,7 @@ var driver_seated := false
 
 var _shell: Node3D
 var _rays: Array[RayCast3D] = []
+var _probe: RayCast3D
 var _grounded := false
 var _ground_normal := Vector3.UP
 
@@ -288,8 +307,25 @@ func _build_placeholder() -> void:
 	_shell.add_child(nose)
 
 
-# Four rays from the body's origin, reaching past the ride height so
-# there is room to measure a compressed spring.
+# Four suspension rays, plus one probe that catches the car if it ever
+# ends up UNDER the floor.
+#
+# THIS IS THE MELT-THROUGH FIX. The rays used to start at the body's
+# origin, which rides one RIDE_HEIGHT above the ground, and
+# RayCast3D.hit_from_inside defaults to FALSE. So the failure was a
+# one-way trap:
+#
+#   1. a hard landing or a kerb pushes the origin below the road surface
+#   2. all four rays now START INSIDE the ground collider
+#   3. hit_from_inside is false, so they report nothing
+#   4. nothing reported means not grounded, which means no spring force
+#   5. no spring force means it keeps falling, which means step 2 forever
+#
+# Two or three seconds of driving was all it took to hit step 1 once, and
+# there was no way back out. Three things stop it now: the rays start a
+# ride height ABOVE the origin so there is real headroom, they report
+# from inside a collider, and the probe below un-sticks the car outright
+# if it still manages to get under the world.
 func _build_suspension() -> void:
 	var half_w := CAR_WIDTH * 0.42
 	var half_l := CAR_LENGTH * 0.36
@@ -302,12 +338,22 @@ func _build_suspension() -> void:
 
 	for corner in corners:
 		var ray := RayCast3D.new()
-		ray.position = corner
-		ray.target_position = Vector3(0.0, -RIDE_HEIGHT * 1.9, 0.0)
+		ray.position = corner + Vector3(0.0, RAY_LIFT, 0.0)
+		ray.target_position = Vector3(0.0, -RAY_LENGTH, 0.0)
 		ray.enabled = true
 		ray.exclude_parent = true
+		# A ray that begins underground reports the surface it is buried
+		# in rather than silently reporting nothing.
+		ray.hit_from_inside = true
 		add_child(ray)
 		_rays.append(ray)
+
+	_probe = RayCast3D.new()
+	_probe.position = Vector3(0.0, PROBE_LIFT, 0.0)
+	_probe.target_position = Vector3(0.0, -(PROBE_LIFT + PROBE_REACH), 0.0)
+	_probe.enabled = true
+	_probe.exclude_parent = true
+	add_child(_probe)
 
 
 # CPUParticles3D rather than GPU: the Compatibility renderer runs these
@@ -452,6 +498,8 @@ func _physics_process(delta: float) -> void:
 # --- Ground ---------------------------------------------------------
 
 func _read_ground() -> void:
+	_unbury()
+
 	_grounded = false
 	var normal := Vector3.ZERO
 	var hits := 0
@@ -467,6 +515,32 @@ func _read_ground() -> void:
 		_ground_normal = (normal / float(hits)).normalized()
 
 
+# The last line of defence against driving into the floor.
+#
+# The probe starts well above the roof and looks straight down. In normal
+# driving it finds the road BELOW the car and nothing happens. If it ever
+# finds a surface ABOVE the car's origin, the car is underneath the world,
+# and no amount of spring force is going to argue it back out - so it gets
+# put back on top of that surface with its downward speed cancelled.
+#
+# Checked every physics frame, so the car is only ever a frame's worth of
+# fall under the surface when this catches it.
+func _unbury() -> void:
+	if not _probe.is_colliding():
+		return
+
+	var surface := _probe.get_collision_point().y
+	if surface <= global_position.y + SURFACE_SLACK:
+		return
+
+	var lifted := global_transform
+	lifted.origin.y = surface + RIDE_HEIGHT
+	global_transform = lifted
+
+	if linear_velocity.y < 0.0:
+		linear_velocity.y = 0.0
+
+
 # One spring per corner, pushing along the shell's own up so the car
 # banks with a slope rather than fighting it.
 func _apply_suspension() -> void:
@@ -478,8 +552,11 @@ func _apply_suspension() -> void:
 
 		var contact := ray.get_collision_point()
 		var offset := contact - global_position
+		# Measured from the ray's own start, which sits RAY_LIFT above
+		# the body origin - so REST_LENGTH, not RIDE_HEIGHT, is where the
+		# spring is neither compressed nor extended.
 		var distance := ray.global_position.distance_to(contact)
-		var compression := clampf((RIDE_HEIGHT - distance) / RIDE_HEIGHT, 0.0, 1.0)
+		var compression := clampf((REST_LENGTH - distance) / RIDE_HEIGHT, 0.0, 1.0)
 
 		var point_velocity := linear_velocity + angular_velocity.cross(offset)
 		var closing := point_velocity.dot(up)

@@ -21,6 +21,7 @@ const GOAL_DEPTH_UU := 880.0
 
 const HALF_WIDTH := FIELD_WIDTH_UU * 0.5 * CarBody.UU
 const HALF_LENGTH := FIELD_LENGTH_UU * 0.5 * CarBody.UU
+const FLOOR_DEPTH := 24.0
 const CEILING := FIELD_HEIGHT_UU * CarBody.UU
 const GOAL_HALF_WIDTH := GOAL_WIDTH_UU * 0.5 * CarBody.UU
 const GOAL_HEIGHT := GOAL_HEIGHT_UU * CarBody.UU
@@ -139,8 +140,13 @@ func _build_pitch() -> void:
 	# never has to be watertight or match RL's dimensions.
 	_build_stadium_shell()
 
+	# Two metres of visible floor over a much deeper collider: at RL
+	# speeds the car covers three metres in one physics tick, and a thin
+	# floor is a floor it can end up underneath.
 	_slab(body, Vector3(0, -1.0, 0), Vector3(HALF_WIDTH * 2.0, 2.0, HALF_LENGTH * 2.0),
-		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")))
+		Textures.sidewalk(HALF_WIDTH, Color("#131a2c")),
+		Vector3(HALF_WIDTH * 2.0, FLOOR_DEPTH, HALF_LENGTH * 2.0),
+		Vector3(0.0, 1.0 - FLOOR_DEPTH * 0.5, 0.0))
 
 	# Walls. The goal openings are cut by building each end wall as two
 	# posts and a lintel rather than one slab.
@@ -182,7 +188,11 @@ func _end_wall(body: StaticBody3D, z: float, material: Material) -> void:
 		Vector3(GOAL_HALF_WIDTH * 2.0, CEILING - GOAL_HEIGHT, 2.0), material)
 
 
-func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material) -> void:
+# One piece of the arena shell. The collider is normally the same box you
+# can see, but the floor passes a deeper one so nothing can be driven
+# through it - hence the two optional arguments.
+func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material,
+		collider_size: Vector3 = Vector3.ZERO, collider_at: Vector3 = Vector3.ZERO) -> void:
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = size
@@ -193,9 +203,9 @@ func _slab(body: StaticBody3D, at: Vector3, size: Vector3, material: Material) -
 
 	var shape := CollisionShape3D.new()
 	var collider := BoxShape3D.new()
-	collider.size = size
+	collider.size = size if collider_size == Vector3.ZERO else collider_size
 	shape.shape = collider
-	shape.position = at
+	shape.position = at + collider_at
 	body.add_child(shape)
 
 

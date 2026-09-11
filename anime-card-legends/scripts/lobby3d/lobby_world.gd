@@ -115,6 +115,7 @@ const MOUNTAIN_PASS_ARC := 0.5
 # The ground is drawn as tiles rather than one slab for the same
 # reason: a single huge mesh would try to take every light in the
 # district and silently drop all but eight of them.
+const GROUND_DEPTH := 24.0
 const GROUND_TILES := 8
 
 # Destinations, in the order they are placed around the plaza. "model"
@@ -364,11 +365,17 @@ func _build_ground() -> void:
 				-CITY_HALF + span * (float(tz) + 0.5))
 			ground.add_child(tile)
 
+	# The COLLIDER is far thicker than the slabs you can see. The car
+	# tops out at 184 m/s, which is three metres per physics tick, so a
+	# one-metre-thick floor is something it can be on the far side of in
+	# a single frame. Deep enough that anything moving fast enough to get
+	# past the surface is still inside the box on the next tick, where the
+	# suspension rays can find it and push it back out.
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(CITY_HALF * 2.0, 1.0, CITY_HALF * 2.0)
+	box.size = Vector3(CITY_HALF * 2.0, GROUND_DEPTH, CITY_HALF * 2.0)
 	shape.shape = box
-	shape.position.y = -0.5
+	shape.position.y = -GROUND_DEPTH * 0.5
 	ground.add_child(shape)
 
 	_build_perimeter_wall()
