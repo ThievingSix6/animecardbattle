@@ -72,6 +72,10 @@ var camera: Dictionary = CAMERA_DEFAULTS.duplicate()
 var ball_cam := true
 var team_size := 1
 
+# Which car model the player drives, as a Models name. Empty means "the
+# first one on disk", so a fresh profile just works.
+var car_model := ""
+
 # Rebound controls, action name -> {"key": scancode, "button": index}.
 # Only actions the player actually changed appear here; everything else
 # stays on the default Controls registers at startup.
@@ -173,6 +177,11 @@ func set_ball_cam(value: bool) -> void:
 	_announce()
 
 
+func set_car_model(value: String) -> void:
+	car_model = value
+	_announce()
+
+
 func set_team_size(value: int) -> void:
 	team_size = clampi(value, 1, 2)
 	_announce()
@@ -201,6 +210,7 @@ func reset_to_defaults() -> void:
 	camera = CAMERA_DEFAULTS.duplicate()
 	ball_cam = true
 	team_size = 1
+	car_model = ""
 	bindings = {}
 	_apply_to_audio()
 	_announce()
@@ -228,6 +238,7 @@ func load_settings() -> void:
 	dev_mode = bool(config.get_value("gameplay", "dev_mode", dev_mode))
 
 	ball_cam = bool(config.get_value("arena", "ball_cam", ball_cam))
+	car_model = str(config.get_value("arena", "car_model", car_model))
 	team_size = clampi(int(config.get_value("arena", "team_size", team_size)), 1, 2)
 
 	# Read key by key rather than as one blob, so a settings file written
@@ -260,6 +271,7 @@ func save_settings() -> void:
 	config.set_value("gameplay", "reduce_flashing", reduce_flashing)
 	config.set_value("gameplay", "dev_mode", dev_mode)
 	config.set_value("arena", "ball_cam", ball_cam)
+	config.set_value("arena", "car_model", car_model)
 	config.set_value("arena", "team_size", team_size)
 	for key in CAMERA_KEYS:
 		config.set_value("camera", key, camera_value(key))

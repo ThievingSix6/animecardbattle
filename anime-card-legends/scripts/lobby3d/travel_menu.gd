@@ -77,6 +77,8 @@ func _build() -> void:
 
 	_rows.add_child(_city_row())
 	_rows.add_child(_arena_row())
+	_rows.add_child(_rings_row())
+	_rows.add_child(_garage_row())
 	for zone_index in Campaign.ZONES.size():
 		_rows.add_child(_zone_row(zone_index))
 
@@ -97,6 +99,21 @@ func _arena_row() -> Control:
 		"🚀  Rocket Arena",
 		"Five minutes, one ball, one opponent. Bring the car.",
 		Color("#ff6b35"), true, false, func(): _travel_to_arena())
+
+
+# Flying practice, and the only place in the game with unlimited boost.
+func _rings_row() -> Control:
+	return _row(
+		"💫  The Rings",
+		"Thirty rings, unlimited boost, no floor. Fly the line.",
+		Color("#35d6ff"), true, false, func(): _travel_to_rings())
+
+
+func _garage_row() -> Control:
+	return _row(
+		"🔧  Garage",
+		"Pick the car you drive. Every model in art/models/props/cars/.",
+		Color("#b04cff"), true, false, func(): _travel_to_garage())
 
 
 func _zone_row(zone_index: int) -> Control:
@@ -160,6 +177,14 @@ func _travel_to_city() -> void:
 
 func _travel_to_arena() -> void:
 	_leave(Routes.ARENA)
+
+
+func _travel_to_rings() -> void:
+	_leave(Routes.RINGS)
+
+
+func _travel_to_garage() -> void:
+	_leave(Routes.GARAGE)
 
 
 func _travel_to_zone(zone_index: int) -> void:

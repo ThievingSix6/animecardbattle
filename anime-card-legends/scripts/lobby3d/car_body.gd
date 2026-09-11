@@ -84,10 +84,10 @@ const WHEEL_NAMES: Array[String] = ["FrontLeft", "FrontRight", "RearLeft", "Rear
 
 @export_group("Body")
 @export var car_mass := 180.0
-# The supplied car.glb is 1.40 long on X against 0.60 on Z, so its
-# LENGTH runs along X - it needs a quarter turn, not a half one. Flip
-# the sign if it drives backwards.
-@export var model_yaw := PI * 0.5
+# An EXTRA turn on top of the one Cars.spawn() works out from the
+# model's own shape. Leave it at zero; set it to PI if a particular car
+# ends up driving backwards.
+@export var model_yaw := 0.0
 @export var model_pitch := 0.0
 @export var model_roll := 0.0
 
@@ -334,15 +334,19 @@ func _build_shell() -> void:
 	_shell = Node3D.new()
 	add_child(_shell)
 
-	var model := Models.spawn_prop("car")
+	# Whichever car the player picked in the garage. Cars.spawn() also
+	# turns it to face forwards, MEASURED from the model rather than read
+	# off a constant - a per-model yaw tuned for one car is no use once
+	# there are four.
+	var model := Cars.spawn(Cars.selected())
 	if model != null:
 		# Turned FIRST, then measured. Fitting before turning meant the
 		# seat height was computed for the wrong axis, so a turned model
 		# ended up half-buried in the road.
 		#
-		# spin(), not `model.rotation =`: car.glb carries its Y-up
-		# conversion and a x100 unit conversion on its own root node, and
-		# assigning euler angles over that wiped both out.
+		# spin(), not `model.rotation =`: a .glb carries its Y-up
+		# conversion and often a x100 unit conversion on its own root
+		# node, and assigning euler angles over that wipes both out.
 		Models.spin(model, model_yaw)
 		Models.tilt(model, model_pitch, model_roll)
 
