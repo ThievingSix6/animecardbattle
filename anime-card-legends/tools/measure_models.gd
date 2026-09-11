@@ -7,9 +7,10 @@ extends Node
 #
 # For every prop, three boxes are measured:
 #
-#   mesh      the raw Mesh AABB, which is what the MultiMesh paths used
-#             to draw before the correction was carried through
-#   fixed     correction * mesh, which is what they draw now
+#   mesh      the FIRST mesh's raw AABB, which is all the MultiMesh
+#             paths used to draw and in the wrong orientation too
+#   fixed     every mesh merged with its transform baked in, which is
+#             what they draw now
 #   node      the whole model instanced as nodes, which has always been
 #             right because Godot applies the hierarchy itself
 #
@@ -38,15 +39,18 @@ func _ready() -> void:
 			continue
 		add_child(node)
 
-		var info := Models.first_mesh_info(node)
+		var first := Models.first_mesh(node)
+		if first == null:
+			node.queue_free()
+			continue
+		var raw := first.get_aabb()
+
+		var info := Models.merged_mesh_info(node, Models.PROP_FOLDER + model_name)
 		var mesh: Mesh = info["mesh"]
 		if mesh == null:
 			node.queue_free()
 			continue
-
-		var raw := mesh.get_aabb()
-		var correction: Transform3D = info["correction"]
-		var fixed: AABB = correction * raw
+		var fixed := mesh.get_aabb()
 		var whole: AABB = Models.model_frame(node) * Models.combined_aabb(node)
 
 		var agrees := _same_shape(fixed, whole)

@@ -173,9 +173,8 @@ func _build_mountain_models(variants: Array[String], placements: Array[Dictionar
 		if sample == null:
 			continue
 
-		var info := Models.first_mesh_info(sample)
+		var info := Models.merged_mesh_info(sample, Models.PROP_FOLDER + name)
 		var mesh: Mesh = info["mesh"]
-		var material := Models.first_material(sample, Models.PROP_FOLDER + name)
 		sample.queue_free()
 		if mesh == null:
 			continue
@@ -205,8 +204,8 @@ func _build_mountain_models(variants: Array[String], placements: Array[Dictionar
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
-		if material != null:
-			node.material_override = material
+		# NO material_override. The merged mesh carries a material per
+		# surface, and an override would replace all of them with one.
 		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(node)
 

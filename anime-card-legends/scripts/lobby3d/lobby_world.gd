@@ -592,13 +592,11 @@ func _build_skyline() -> void:
 
 	var model := Models.spawn_prop("building")
 	var mesh: Mesh = null
-	var material: Material = null
 
 	var info := {"mesh": null, "correction": Transform3D.IDENTITY}
 	if model != null:
-		info = Models.first_mesh_info(model)
+		info = Models.merged_mesh_info(model, Models.PROP_FOLDER + "building")
 		mesh = info["mesh"]
-		material = Models.first_material(model, Models.PROP_FOLDER + "building")
 		model.queue_free()
 
 	var fallback := mesh == null
@@ -654,9 +652,13 @@ func _build_skyline() -> void:
 
 	var node := MultiMeshInstance3D.new()
 	node.multimesh = multi
-	if material != null:
-		node.material_override = material
-	elif fallback:
+	# NO material_override. The merged mesh carries a material per
+	# surface, and an override would replace all of them with one - which
+	# is what drawing a whole model through one MultiMesh costs if you
+	# are not careful.
+	# The procedural box has no material of its own, so it is the one
+	# case that still needs one.
+	if fallback:
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color.WHITE
 		mat.vertex_color_use_as_albedo = true
@@ -681,9 +683,8 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 		if sample == null:
 			continue
 
-		var info := Models.first_mesh_info(sample)
+		var info := Models.merged_mesh_info(sample, Models.PROP_FOLDER + model_name)
 		var mesh: Mesh = info["mesh"]
-		var material := Models.first_material(sample, Models.PROP_FOLDER + model_name)
 		sample.queue_free()
 		if mesh == null:
 			continue
@@ -725,8 +726,6 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
-		if material != null:
-			node.material_override = material
 		add_child(node)
 
 
@@ -1255,9 +1254,8 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 		if sample == null:
 			continue
 
-		var info := Models.first_mesh_info(sample)
+		var info := Models.merged_mesh_info(sample, Models.PROP_FOLDER + prop_name)
 		var mesh: Mesh = info["mesh"]
-		var material := Models.first_material(sample, Models.PROP_FOLDER + prop_name)
 		sample.queue_free()
 		if mesh == null:
 			continue
@@ -1288,8 +1286,6 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) 
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi
-		if material != null:
-			node.material_override = material
 		add_child(node)
 
 

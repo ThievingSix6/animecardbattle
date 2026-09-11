@@ -199,68 +199,117 @@ static func spawn_npc(npc_id: String) -> Node3D:
 	return node
 
 
-# The first mesh inside an imported model, AND the transform it sits
-# under, for drawing many copies through a single MultiMesh instead of a
-# node each.
+# EVERY mesh inside an imported model, baked into one Mesh, for drawing
+# many copies through a single MultiMesh instead of a node each.
 #
-# THE TRANSFORM IS NOT OPTIONAL. This was the whole orientation bug.
+# This replaced first_mesh_info(), which returned literally the first
+# mesh it found and nothing else. Most of these models are not one mesh:
 #
-# Almost every .glb here was authored in a Z-up tool and exported with
-# the Y-up conversion as a -90 degrees X rotation on the model's ROOT NODE
-# rather than baked into the vertices. Measured for real:
+#   stadium.glb   17 meshes. One 4530 x 181 x 381 beam was being drawn
+#                 in place of an 8575 x 4661 x 5916 stadium.
+#   mcdonalds     11 meshes. A 0.55-wide sliver of a 30 x 8 x 24
+#                 restaurant.
+#   the trees     21 and 6 meshes. One branch cluster of a tree.
+#   the mountains 10 meshes, the vending machines 7 and 5.
 #
-#   Bench_02.glb    mesh data 192 x  72 x  55   (Z-up, on its back)
-#                   under its root node         1.92 x 0.55 x 0.72  correct
-#   stadium.glb     mesh data  45 x 3.8 x 1.8   (Z-up, on its back)
+# Every one of those was drawn as a fragment of itself everywhere it
+# appeared in the world.
 #
-# Instancing the model as a node applies that rotation and everything
-# looks right. Pulling the bare Mesh out for a MultiMesh dropped it on
-# the floor, which is why "most of the models are still sitting on their
-# side" - it was never a property of the models, it was this function
-# throwing their correction away.
+# THE TRANSFORMS ARE NOT OPTIONAL EITHER. That was the orientation bug,
+# and it is baked in here: almost every .glb was authored in a Z-up tool
+# and exported with the Y-up conversion as a -90 degrees X rotation on
+# the model's ROOT NODE rather than in the vertices.
 #
-# Returns {"mesh": Mesh, "correction": Transform3D}; mesh is null when
-# the model has no drawable geometry.
-static func first_mesh_info(root: Node) -> Dictionary:
-	var node := _first_mesh_node(root)
-	if node == null or node.mesh == null:
-		return {"mesh": null, "correction": Transform3D.IDENTITY}
-	return {"mesh": node.mesh, "correction": model_frame(root) * _relative_transform(node, root)}
+#   Bench_02.glb   mesh data 192 x 72 x 55    (Z-up, on its back)
+#                  under its root node        1.92 x 0.55 x 0.72  correct
+#
+# Instancing a model as nodes applies all of that, which is why the node
+# path always looked right. Pulling a bare Mesh out threw it away.
+#
+# Surfaces are grouped by material, so a model with three materials
+# across twenty meshes commits three surfaces rather than twenty, and a
+# MultiMesh draws all of them.
+#
+# Returns {"mesh": Mesh, "correction": Transform3D}. The correction is
+# always the identity - it is already in the vertices - but it is still
+# returned so the fit helpers have one shape to work with.
+static func merged_mesh_info(root: Node3D, base_path: String = "") -> Dictionary:
+	var empty := {"mesh": null, "correction": Transform3D.IDENTITY}
+	if root == null:
+		return empty
+
+	# Material -> the SurfaceTool collecting everything drawn with it.
+	var builders: Dictionary = {}
+	var order: Array = []
+	_gather_surfaces(root, root, model_frame(root), builders, order)
+	if order.is_empty():
+		return empty
+
+	var texture := emissive_texture(base_path) if base_path != "" else null
+
+	var merged := ArrayMesh.new()
+	for key in order:
+		var builder: SurfaceTool = builders[key]
+		builder.index()
+		builder.commit(merged)
+
+		var material: Material = key if key is Material else null
+		merged.surface_set_material(merged.get_surface_count() - 1, _lit_copy(material, texture))
+
+	return {"mesh": merged, "correction": Transform3D.IDENTITY}
 
 
-# The mesh on its own, for the callers that only need to know whether the
-# model has geometry at all.
-static func first_mesh(root: Node) -> Mesh:
-	var node := _first_mesh_node(root)
-	if node == null:
-		return null
-	return node.mesh
+# Walks the model, appending every surface of every MeshInstance3D into
+# the builder for its material, with the node's own transform applied.
+static func _gather_surfaces(node: Node, root: Node, frame: Transform3D,
+		builders: Dictionary, order: Array) -> void:
+	if node is MeshInstance3D:
+		var mesh_node: MeshInstance3D = node
+		if mesh_node.mesh != null:
+			var placement := frame * _relative_transform(mesh_node, root)
+			for i in mesh_node.mesh.get_surface_count():
+				var material: Material = mesh_node.get_surface_override_material(i)
+				if material == null:
+					material = mesh_node.mesh.surface_get_material(i)
+
+				# Dictionary keys have to be hashable and a null material
+				# is not a key, so unmaterialled surfaces share one bucket.
+				var key: Variant = material if material != null else 0
+				if not builders.has(key):
+					var builder := SurfaceTool.new()
+					builder.begin(Mesh.PRIMITIVE_TRIANGLES)
+					builders[key] = builder
+					order.append(key)
+
+				var into: SurfaceTool = builders[key]
+				into.append_from(mesh_node.mesh, i, placement)
+
+	for child in node.get_children():
+		_gather_surfaces(child, root, frame, builders, order)
 
 
-# The material a MultiMesh should draw that mesh with, emissive sidecar
-# included - a MultiMeshInstance3D has one material for every copy.
-static func first_material(root: Node, base_path: String) -> Material:
-	var node := _first_mesh_node(root)
-	if node == null:
-		return null
+# The material with the sidecar emissive map applied, or the material
+# untouched when there is no sidecar or it already has its own emission.
+static func _lit_copy(material: Material, texture: Texture2D) -> Material:
+	if material == null or texture == null or not (material is BaseMaterial3D):
+		return material
 
-	var source: Material = node.get_surface_override_material(0)
-	if source == null and node.mesh != null and node.mesh.get_surface_count() > 0:
-		source = node.mesh.surface_get_material(0)
-	if source == null or not (source is BaseMaterial3D):
-		return source
-
-	var texture := emissive_texture(base_path)
-	if texture == null:
-		return source
-
-	var base: BaseMaterial3D = source
+	var base: BaseMaterial3D = material
 	if base.emission_enabled and base.emission_texture != null:
 		return base
 
 	var lit: BaseMaterial3D = base.duplicate()
 	_light_material(lit, texture, EMISSIVE_ENERGY)
 	return lit
+
+
+# The first mesh on its own, for the callers that only need to know
+# whether the model has drawable geometry at all.
+static func first_mesh(root: Node) -> Mesh:
+	var node := _first_mesh_node(root)
+	if node == null:
+		return null
+	return node.mesh
 
 
 static func _first_mesh_node(root: Node) -> MeshInstance3D:
@@ -277,7 +326,7 @@ static func _first_mesh_node(root: Node) -> MeshInstance3D:
 # a mesh needs to stand `height` tall on a `width` footprint, plus how
 # far to lift it so its base sits on the ground.
 #
-# Takes the dictionary from first_mesh_info(), not a bare Mesh, so the
+# Takes the dictionary from merged_mesh_info(), not a bare Mesh, so the
 # model's own root correction is measured in and carried through to
 # box_transform().
 static func mesh_fit_box(info: Dictionary, model_name: String = "") -> Dictionary:
@@ -505,7 +554,7 @@ static func _light_material(material: BaseMaterial3D, texture: Texture2D, energy
 #
 # The correction is a fact recorded in the file. It does not need to be
 # guessed - it needs to not be thrown away, which is what
-# first_mesh_info() now fixes.
+# merged_mesh_info() now fixes.
 #
 # What survives is the manual override, for a model that genuinely lacks
 # the conversion node:
