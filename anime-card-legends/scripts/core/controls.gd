@@ -50,12 +50,39 @@ const ACTIONS: Array[Dictionary] = [
 		"axis": [[JOY_AXIS_LEFT_X, 1.0]],
 	},
 	{
+		# Cross on a PlayStation pad. Godot's JOY_BUTTON_A is the
+		# bottom face button on every controller.
 		"name": "acl_jump",
 		"keys": [KEY_SPACE],
 		"buttons": [JOY_BUTTON_A],
 		"axis": [],
 	},
 	{
+		# Triangle. Getting in and out of the car is its own action, not
+		# the interact button, so boost and exit can never be the same
+		# press.
+		"name": "acl_vehicle",
+		"keys": [KEY_F, KEY_ENTER, KEY_KP_ENTER],
+		"buttons": [JOY_BUTTON_Y],
+		"axis": [],
+	},
+	{
+		# Right trigger. A trigger is an axis, not a button, so it reads
+		# as an analogue throttle rather than on-or-off.
+		"name": "acl_throttle",
+		"keys": [KEY_W, KEY_UP],
+		"buttons": [],
+		"axis": [[JOY_AXIS_TRIGGER_RIGHT, 1.0]],
+	},
+	{
+		# Left trigger: brake, and reverse once stopped.
+		"name": "acl_brake",
+		"keys": [KEY_S, KEY_DOWN],
+		"buttons": [],
+		"axis": [[JOY_AXIS_TRIGGER_LEFT, 1.0]],
+	},
+	{
+		# On foot only. L3, so it is nowhere near the driving controls.
 		"name": "acl_sprint",
 		"keys": [KEY_SHIFT],
 		"buttons": [JOY_BUTTON_LEFT_STICK],
@@ -70,18 +97,18 @@ const ACTIONS: Array[Dictionary] = [
 		"axis": [],
 	},
 	{
-		# Boost. Right shoulder is where every driving game puts it.
+		# Circle. Not a shoulder button, because R1 is powerslide.
 		"name": "acl_boost",
 		"keys": [KEY_SHIFT],
-		"buttons": [JOY_BUTTON_RIGHT_SHOULDER],
+		"buttons": [JOY_BUTTON_B],
 		"axis": [],
 	},
 	{
-		# Powerslide on the ground; converts yaw into roll in the air,
-		# which is the air-roll modifier.
+		# R1: powerslide on the ground, air roll in the air. One button
+		# for both, the way Rocket League does it.
 		"name": "acl_drift",
 		"keys": [KEY_CTRL],
-		"buttons": [JOY_BUTTON_LEFT_SHOULDER],
+		"buttons": [JOY_BUTTON_RIGHT_SHOULDER],
 		"axis": [],
 	},
 	{
@@ -168,6 +195,15 @@ func interact_pressed() -> bool:
 	return Input.is_action_just_pressed("acl_interact")
 
 
+func vehicle_pressed() -> bool:
+	return Input.is_action_just_pressed("acl_vehicle")
+
+
+# Analogue on a trigger, digital on a key. Positive is forward.
+func throttle() -> float:
+	return Input.get_action_strength("acl_throttle") - Input.get_action_strength("acl_brake")
+
+
 func cancel_pressed() -> bool:
 	return Input.is_action_just_pressed("acl_cancel")
 
@@ -180,5 +216,11 @@ func using_controller() -> bool:
 
 func interact_prompt() -> String:
 	if using_controller():
-		return "X / ENTER"
-	return "ENTER"
+		return "SQUARE / E"
+	return "E"
+
+
+func vehicle_prompt() -> String:
+	if using_controller():
+		return "TRIANGLE"
+	return "F"

@@ -178,12 +178,16 @@ func _process(_delta: float) -> void:
 
 	if Controls.interact_pressed():
 		_interact()
+	elif Controls.vehicle_pressed() and str(_current.get("kind", "")) == "car":
+		_enter_car()
 
 
 func _update_driving() -> void:
 	if hud != null:
 		hud.show_boost(car.boost_fraction(), car.speed())
-	if Controls.interact_pressed() or Controls.cancel_pressed():
+	# Triangle only. Cancel used to work too, which meant Circle both
+	# boosted and got out of the car.
+	if Controls.vehicle_pressed():
 		_exit_car()
 
 
@@ -851,7 +855,7 @@ func _build_portal() -> void:
 func _build_car() -> void:
 	car = CarBody.create()
 	# Parked on the plaza's edge, clear of the portal and the shopfronts.
-	car.position = Vector3(26.0, CarBody.CAR_HEIGHT, 34.0)
+	car.position = Vector3(26.0, CarBody.RIDE_HEIGHT + 0.5, 34.0)
 	car.rotation.y = PI
 	add_child(car)
 
@@ -1106,7 +1110,7 @@ func _update_proximity() -> void:
 		"npc":
 			hud.show_prompt("Press %s to talk to %s" % [key, str(closest["name"])])
 		"car":
-			hud.show_prompt("Press %s to drive" % key)
+			hud.show_prompt("Press %s to drive" % Controls.vehicle_prompt())
 		_:
 			hud.show_prompt("Press %s to visit %s" % [key, str(closest["name"])])
 

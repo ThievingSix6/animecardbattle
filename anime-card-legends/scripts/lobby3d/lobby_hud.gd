@@ -108,14 +108,16 @@ func _build() -> void:
 func _controls_hint() -> String:
 	if _driving:
 		if Controls.using_controller():
-			return ("Left stick drive  ·  RB boost  ·  A jump, again to flip  ·  "
-				+ "LB drift / air roll  ·  X or B to get out")
-		return ("WASD drive  ·  Shift boost  ·  Space jump, again to flip  ·  "
-			+ "Ctrl drift / air roll  ·  E or Esc to get out")
+			return ("R2 accelerate  ·  L2 brake  ·  Left stick steer  ·  "
+				+ "R1 powerslide / air roll  ·  Cross jump, again to flip  ·  "
+				+ "Circle boost  ·  Triangle to get out")
+		return ("W accelerate  ·  S brake  ·  A/D steer  ·  "
+			+ "Ctrl powerslide / air roll  ·  Space jump, again to flip  ·  "
+			+ "Shift boost  ·  F to get out")
 
 	if Controls.using_controller():
-		return ("Left stick move  ·  Right stick look  ·  A jump  ·  "
-			+ "X interact  ·  L3 sprint  ·  B back")
+		return ("Left stick move  ·  Right stick look  ·  Cross jump  ·  "
+			+ "Square interact  ·  Triangle to drive  ·  L3 sprint")
 	return ("WASD move  ·  Mouse look  ·  Space jump  ·  E / Enter interact  ·  "
 		+ "Shift sprint  ·  Esc free cursor")
 
