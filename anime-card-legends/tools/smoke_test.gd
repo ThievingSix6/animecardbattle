@@ -21,6 +21,7 @@ const CASES: Array[Dictionary] = [
 	{"scene": "res://scenes/Arena.tscn", "frames": 180},
 	{"scene": "res://scenes/Rings.tscn", "frames": 120},
 	{"scene": "res://scenes/Garage.tscn", "frames": 60},
+	{"scene": "res://scenes/House.tscn", "frames": 90},
 	{"scene": "res://scenes/Zone.tscn", "frames": 60},
 	{"scene": "res://scenes/Title.tscn", "frames": 20},
 	{"scene": "res://scenes/Main.tscn", "frames": 20},

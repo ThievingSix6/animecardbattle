@@ -85,6 +85,12 @@ const TOWER_HEIGHT_MAX := 78.0
 # The open square in the middle: portal, NPCs, and the destinations
 # around its edge.
 const PLAZA_RADIUS := 42.0
+# The house, off the shop ring and a little further out.
+const HOUSE_ANGLE := PI * 0.62
+const HOUSE_RING := 86.0
+const HOUSE_WIDTH := 26.0
+const HOUSE_HEIGHT := 16.0
+
 const STOREFRONT_RING := 66.0
 
 const STOREFRONT_WIDTH := 26.0
@@ -240,6 +246,13 @@ func _update_driving() -> void:
 		_exit_car()
 
 
+# The house is a place, not a screen: entering it swaps to the interior
+# scene, and its door pad drops the player back on this doorstep.
+func _enter_house() -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Routes.enter(self, Routes.HOUSE, Routes.LOBBY)
+
+
 func _enter_arena() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Routes.enter(self, Routes.ARENA, Routes.LOBBY)
@@ -258,6 +271,8 @@ func _interact() -> void:
 			_enter_car()
 		"stadium":
 			_enter_arena()
+		"house":
+			_enter_house()
 		_:
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 			# Leaving a shop drops the player back on its doorstep, not
@@ -858,6 +873,64 @@ func _build_storefronts() -> void:
 	var tower_at := Vector3(
 		cos(tower_angle) * STOREFRONT_RING, 0.0, sin(tower_angle) * STOREFRONT_RING)
 	_build_tower(tower_at)
+
+	_build_house()
+
+
+# --- The player's house --------------------------------------------------
+
+# Off the plaza rather than on the shop ring: it is somewhere you live,
+# not somewhere you buy things. Walking onto the pad at its door swaps to
+# the interior scene.
+#
+#   res://art/models/props/home/house.glb      this building
+#   res://art/models/props/home/interior.glb   what is inside it
+func _build_house() -> void:
+	var tint := Color("#f5a623")
+	var at := Vector3(cos(HOUSE_ANGLE), 0.0, sin(HOUSE_ANGLE)) * HOUSE_RING
+
+	var root := Node3D.new()
+	root.position = at
+	root.rotation.y = atan2(-at.x, -at.z)
+	add_child(root)
+
+	var footprint := HOUSE_WIDTH
+	var model := Models.spawn_prop("home/house")
+	if model != null:
+		root.add_child(model)
+		# fit_span, not fit_box: a house has proportions worth keeping,
+		# and stretching one to a target height is what turned the props
+		# into slabs.
+		var size := Models.fit_span(model, HOUSE_WIDTH)
+		if size != Vector3.ZERO:
+			footprint = maxf(size.x, size.z)
+			_add_box_collider(root, Vector3(size.x, maxf(size.y, 1.0), size.z))
+	else:
+		footprint = _place_destination_building(root, "house", HOUSE_WIDTH, HOUSE_HEIGHT)
+
+	_build_plate(root, "🏠  Home", HOUSE_HEIGHT)
+
+	var porch := OmniLight3D.new()
+	porch.position = Vector3(0.0, 4.0, footprint * 0.5 + 2.5)
+	porch.light_color = tint
+	porch.light_energy = RenderMode.light(1.3)
+	porch.omni_range = 26.0
+	root.add_child(porch)
+
+	# The pad sits on the doorstep, between the house and the plaza.
+	var door := at - at.normalized() * (footprint * 0.5 + 4.0)
+	door.y = 0.0
+	var pad := _build_pad(door, tint)
+
+	_spots.append({
+		"kind": "house",
+		"name": "Home",
+		"route": Routes.HOUSE,
+		"pos": door,
+		"radius": PAD_RADIUS,
+		"pad": pad,
+		"base_color": tint,
+	})
 
 
 func _build_storefront(destination: Dictionary, at: Vector3, height: float) -> Node3D:
@@ -1590,6 +1663,8 @@ func _update_proximity() -> void:
 			hud.show_prompt("Press %s to drive" % Controls.vehicle_prompt())
 		"stadium":
 			hud.show_prompt("Press %s to enter the Rocket Arena" % key)
+		"house":
+			hud.show_prompt("Press %s to go inside" % key)
 		_:
 			hud.show_prompt("Press %s to visit %s" % [key, str(closest["name"])])
 

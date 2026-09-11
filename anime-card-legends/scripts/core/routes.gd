@@ -22,6 +22,7 @@ const BATTLE   := "res://scenes/Battle.tscn"
 const ARENA    := "res://scenes/Arena.tscn"
 const RINGS    := "res://scenes/Rings.tscn"
 const GARAGE   := "res://scenes/Garage.tscn"
+const HOUSE    := "res://scenes/House.tscn"
 const SETTINGS := "res://scenes/Settings.tscn"
 const CLAN     := "res://scenes/Clan.tscn"
 
