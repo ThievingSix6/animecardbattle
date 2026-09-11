@@ -90,6 +90,34 @@ static func has_prop(prop_name: String) -> bool:
 	return prop_resource(prop_name) != null
 
 
+# Every model sitting in a props subfolder, so a folder can be a
+# pool - drop three mountains in and all three get used.
+static func list_props(subfolder: String) -> Array[String]:
+	var folder := PROP_FOLDER + subfolder
+	if not folder.ends_with("/"):
+		folder += "/"
+
+	var dir := DirAccess.open(folder)
+	if dir == null:
+		return []
+
+	var found: Array[String] = []
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		if not dir.current_is_dir():
+			var lower := file_name.to_lower()
+			for ext in EXTENSIONS:
+				if lower.ends_with("." + ext):
+					found.append(subfolder + "/" + file_name.get_basename())
+					break
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+	found.sort()
+	return found
+
+
 # The people in the city: diablo, the_boy, the_jokester.
 static func npc_resource(npc_id: String) -> Resource:
 	return _find(NPC_FOLDER + npc_id)

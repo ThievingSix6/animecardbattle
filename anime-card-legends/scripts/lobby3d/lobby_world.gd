@@ -53,6 +53,17 @@ const FOOTPRINT_MAX := 0.72
 # are what stop a grid reading as a corridor.
 const EMPTY_LOT_CHANCE := 0.2
 
+# How many of those empty lots become parks, and how big the trees in
+# them are next to a 5.7 m player.
+const PARK_CHANCE := 0.55
+const TREE_HEIGHT_MIN := 9.0
+const TREE_HEIGHT_MAX := 18.0
+
+# Anything in props/scatter/, spread along the kerbs.
+const SCATTER_COUNT := 90
+const SCATTER_HEIGHT_MIN := 3.0
+const SCATTER_HEIGHT_MAX := 7.0
+
 # Most of the city is low. The handful of towers are what make the
 # skyline, and they cluster toward the middle.
 const BUILDING_HEIGHT_MIN := 9.0
@@ -128,6 +139,8 @@ var car_camera: CarCamera
 var _driving := false
 
 var _spots: Array[Dictionary] = []
+# Lots the skyline skipped, kept so parks can be dropped into them.
+var _empty_lots: Array[Vector3] = []
 var _npcs: Dictionary = {}          # npc id -> CityNPC
 var _current: Dictionary = {}
 var _menu: Node
@@ -152,6 +165,9 @@ func _ready() -> void:
 	_build_streets()
 	_build_skyline()
 	_build_storefronts()
+	_build_landmark()
+	_build_parks()
+	_build_scatter()
 	_build_portal()
 	_build_npcs()
 	_build_car()
@@ -551,8 +567,10 @@ func _plan_skyline() -> Array[Dictionary]:
 
 					if Vector2(lot.x, lot.z).length() < STOREFRONT_RING + 26.0:
 						continue
-					# Gaps are what stop a grid reading as a corridor.
+					# Gaps are what stop a grid reading as a corridor, and
+					# the emptier ones become parks.
 					if _rng.randf() < EMPTY_LOT_CHANCE:
+						_empty_lots.append(lot)
 						continue
 
 					out.append(_plan_building(lot))
@@ -832,11 +850,248 @@ func _build_pad(at: Vector3, tint: Color) -> MeshInstance3D:
 	return pad
 
 
+# --- Landmarks -----------------------------------------------------------
+
+# The centrepiece of the square. res://art/models/props/statue.glb, or
+# an obelisk built from primitives so the square is never empty.
+func _build_landmark() -> void:
+	var root := Node3D.new()
+	add_child(root)
+
+	var height := STOREFRONT_HEIGHT * 2.4
+	var width := STOREFRONT_WIDTH * 0.8
+
+	var model := Models.spawn_prop("statue")
+	if model != null:
+		root.add_child(model)
+		Models.fit_box(model, width, height)
+	else:
+		_build_obelisk(root, width, height)
+
+	_add_box_collider(root, Vector3(width * 0.6, height, width * 0.6))
+
+	# Lit from below, the way a monument in a square actually is.
+	var sides: Array[float] = [-1.0, 1.0]
+	for side in sides:
+		var lamp := OmniLight3D.new()
+		lamp.position = Vector3(side * width * 0.7, height * 0.12, width * 0.5)
+		lamp.light_color = Color("#b04cff")
+		lamp.light_energy = RenderMode.light(1.3)
+		lamp.omni_range = height * 1.6
+		root.add_child(lamp)
+
+	var plinth := MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = width * 0.95
+	disc.bottom_radius = width * 1.15
+	disc.height = 1.6
+	disc.radial_segments = 24
+	plinth.mesh = disc
+	plinth.position.y = 0.8
+	plinth.material_override = Textures.rock(width, Color("#20263a"))
+	root.add_child(plinth)
+
+
+func _build_obelisk(root: Node3D, width: float, height: float) -> void:
+	var shaft := MeshInstance3D.new()
+	var taper := CylinderMesh.new()
+	taper.top_radius = width * 0.12
+	taper.bottom_radius = width * 0.3
+	taper.height = height
+	taper.radial_segments = 4
+	shaft.mesh = taper
+	shaft.position.y = height * 0.5 + 1.6
+	shaft.material_override = Textures.rock(height, Color("#2a3049"))
+	root.add_child(shaft)
+
+	var crown := MeshInstance3D.new()
+	var gem := SphereMesh.new()
+	gem.radius = width * 0.2
+	gem.height = width * 0.4
+	crown.mesh = gem
+	crown.position.y = height + 2.4
+
+	var crown_mat := StandardMaterial3D.new()
+	crown_mat.albedo_color = Color("#b04cff")
+	crown_mat.emission_enabled = true
+	crown_mat.emission = Color("#d08cff")
+	crown_mat.emission_energy_multiplier = RenderMode.emission(1.0)
+	crown.material_override = crown_mat
+	root.add_child(crown)
+
+
+# --- Parks ---------------------------------------------------------------
+
+# The lots the skyline left empty become parks rather than bare
+# pavement: a grass pad and a few trees, which is what gives the grid
+# somewhere to look that is not a wall.
+func _build_parks() -> void:
+	if _empty_lots.is_empty():
+		return
+
+	var trees := Models.list_props("trees")
+	var placements: Array[Dictionary] = []
+
+	for lot in _empty_lots:
+		if _rng.randf() > PARK_CHANCE:
+			continue
+		_build_park_ground(lot)
+
+		var count := _rng.randi_range(2, 5)
+		for i in count:
+			var at := lot + Vector3(
+				_rng.randf_range(-LOT_SIZE * 0.35, LOT_SIZE * 0.35),
+				0.0,
+				_rng.randf_range(-LOT_SIZE * 0.35, LOT_SIZE * 0.35))
+			placements.append({
+				"pos": at,
+				"height": _rng.randf_range(TREE_HEIGHT_MIN, TREE_HEIGHT_MAX),
+				"spin": _rng.randf_range(0.0, TAU),
+			})
+
+	if trees.is_empty() or placements.is_empty():
+		_build_simple_trees(placements)
+		return
+
+	_build_model_clusters(trees, placements, 0.55)
+
+
+func _build_park_ground(at: Vector3) -> void:
+	var pad := MeshInstance3D.new()
+	var slab := BoxMesh.new()
+	slab.size = Vector3(LOT_SIZE * 0.9, 0.3, LOT_SIZE * 0.9)
+	pad.mesh = slab
+	pad.position = at + Vector3(0.0, 0.12, 0.0)
+	pad.material_override = Textures.grass(LOT_SIZE, Color("#1d3326"))
+	add_child(pad)
+
+
+# Cones and trunks, for before the tree models land.
+func _build_simple_trees(placements: Array[Dictionary]) -> void:
+	for spot in placements:
+		var at: Vector3 = spot["pos"]
+		var height := float(spot["height"])
+
+		var trunk := MeshInstance3D.new()
+		var post := CylinderMesh.new()
+		post.top_radius = height * 0.05
+		post.bottom_radius = height * 0.08
+		post.height = height * 0.4
+		trunk.mesh = post
+		trunk.position = at + Vector3(0.0, height * 0.2, 0.0)
+		trunk.material_override = Textures.rock(height, Color("#2b2119"))
+		add_child(trunk)
+
+		var canopy := MeshInstance3D.new()
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = height * 0.3
+		cone.height = height * 0.75
+		cone.radial_segments = 7
+		canopy.mesh = cone
+		canopy.position = at + Vector3(0.0, height * 0.72, 0.0)
+
+		var leaf := StandardMaterial3D.new()
+		leaf.albedo_color = Color("#20402c")
+		leaf.roughness = 0.9
+		canopy.material_override = leaf
+		add_child(canopy)
+
+
+# --- Scatter -------------------------------------------------------------
+
+# Anything dropped into res://art/models/props/scatter/ turns up along
+# the streets. No registration, no list to maintain - the folder IS the
+# list, which is the cheapest way to keep adding things to look at.
+func _build_scatter() -> void:
+	var props := Models.list_props("scatter")
+	if props.is_empty():
+		return
+
+	var placements: Array[Dictionary] = []
+	for i in SCATTER_COUNT:
+		var angle := _rng.randf_range(0.0, TAU)
+		var distance := _rng.randf_range(PLAZA_RADIUS * 1.4, CITY_HALF * 0.8)
+		var at := Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
+
+		# Pushed to the kerb, so props line the roads instead of
+		# standing in the middle of them.
+		at.x = _kerb(at.x)
+		placements.append({
+			"pos": at,
+			"height": _rng.randf_range(SCATTER_HEIGHT_MIN, SCATTER_HEIGHT_MAX),
+			"spin": _rng.randf_range(0.0, TAU),
+		})
+
+	_build_model_clusters(props, placements, 0.7)
+
+
+# Nudges a coordinate to just off the nearest street centre line.
+func _kerb(value: float) -> float:
+	var line := (round(value / BLOCK_PITCH + 0.5) - 0.5) * BLOCK_PITCH
+	var side := 1.0
+	if value < line:
+		side = -1.0
+	return line + side * (STREET_WIDTH * 0.5 + 2.0)
+
+
+# One MultiMesh per model, placements dealt out between them.
+func _build_model_clusters(names: Array[String], placements: Array[Dictionary], width_ratio: float) -> void:
+	if names.is_empty() or placements.is_empty():
+		return
+
+	for index in names.size():
+		var prop_name := names[index]
+		var sample := Models.spawn_prop(prop_name)
+		if sample == null:
+			continue
+
+		var mesh := Models.first_mesh(sample)
+		var material := Models.first_material(sample, Models.PROP_FOLDER + prop_name)
+		sample.queue_free()
+		if mesh == null:
+			continue
+
+		var mine: Array[Dictionary] = []
+		for i in placements.size():
+			if i % names.size() == index:
+				mine.append(placements[i])
+		if mine.is_empty():
+			continue
+
+		var fit := Models.mesh_fit_box(mesh)
+		var per_width := float(fit["per_width"])
+		var per_height := float(fit["per_height"])
+		var base_lift := float(fit["base"])
+
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.mesh = mesh
+		multi.instance_count = mine.size()
+
+		for i in mine.size():
+			var spot: Dictionary = mine[i]
+			var at: Vector3 = spot["pos"]
+			var height := float(spot["height"])
+			var spin := float(spot["spin"])
+			var orientation := Basis(Vector3.UP, spin).scaled(
+				Vector3(per_width * height * width_ratio, per_height * height,
+					per_width * height * width_ratio))
+			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+
+		var node := MultiMeshInstance3D.new()
+		node.multimesh = multi
+		if material != null:
+			node.material_override = material
+		add_child(node)
+
+
 # --- Portal ------------------------------------------------------------
 
 func _build_portal() -> void:
 	portal = Portal.create(Color("#5ad1ff"))
-	portal.position = Vector3.ZERO
+	# Off-centre now: the statue has the middle of the square.
+	portal.position = Vector3(0.0, 0.0, PLAZA_RADIUS * 0.55)
 	add_child(portal)
 
 	_spots.append({

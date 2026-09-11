@@ -19,6 +19,7 @@ const TOWER    := "res://scenes/Tower.tscn"
 const CAMPAIGN := "res://scenes/Campaign.tscn"
 const ZONE     := "res://scenes/Zone.tscn"
 const BATTLE   := "res://scenes/Battle.tscn"
+const ARENA    := "res://scenes/Arena.tscn"
 const SETTINGS := "res://scenes/Settings.tscn"
 const CLAN     := "res://scenes/Clan.tscn"
 

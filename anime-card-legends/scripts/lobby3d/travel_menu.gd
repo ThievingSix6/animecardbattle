@@ -76,6 +76,7 @@ func _build() -> void:
 	scroll.add_child(_rows)
 
 	_rows.add_child(_city_row())
+	_rows.add_child(_arena_row())
 	for zone_index in Campaign.ZONES.size():
 		_rows.add_child(_zone_row(zone_index))
 
@@ -88,6 +89,14 @@ func _city_row() -> Control:
 		"🏙  The City",
 		"Summon, collection, talents, clan — everything that is not a fight.",
 		accent, true, here == -1, func(): _travel_to_city())
+
+
+# The extra mode, alongside the campaign rather than buried in a menu.
+func _arena_row() -> Control:
+	return _row(
+		"🚀  Rocket Arena",
+		"Five minutes, one ball, one opponent. Bring the car.",
+		Color("#ff6b35"), true, false, func(): _travel_to_arena())
 
 
 func _zone_row(zone_index: int) -> Control:
@@ -147,6 +156,10 @@ func _row(title: String, blurb: String, accent: Color, unlocked: bool, is_here: 
 
 func _travel_to_city() -> void:
 	_leave(Routes.LOBBY)
+
+
+func _travel_to_arena() -> void:
+	_leave(Routes.ARENA)
 
 
 func _travel_to_zone(zone_index: int) -> void:

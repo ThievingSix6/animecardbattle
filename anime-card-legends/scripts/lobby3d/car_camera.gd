@@ -4,10 +4,16 @@ extends Node3D
 # =========================================================
 # Chase camera for the car.
 #
-# Follows where the car is GOING rather than where it is pointing.
-# Pointing-based chase cameras whip around every time the car spins,
-# which is unusable the moment flips are involved - and flips are the
-# whole point of this car.
+# Sits behind the car's NOSE, so the view is where the car is aimed and
+# steering reads the way it should.
+#
+# The catch a pointing camera has is that a car which spins - and this
+# one flips - drags the view around with it. Two guards stop that: the
+# heading is taken from the car's forward flattened onto the ground, so
+# rolling and pitching do not move it at all, and it is smoothed, so a
+# fast yaw arrives as a swing rather than a snap. While the car is
+# airborne the heading is held where it was, which is what stops a
+# barrel roll turning the camera inside out.
 #
 # The right stick and the mouse still nudge it, so the player can look
 # around without the camera fighting them for it.
@@ -26,9 +32,13 @@ const AIM_HEIGHT := CarBody.CAR_HEIGHT * 1.2
 const FOLLOW_SPEED := 9.0
 const AIM_SPEED := 4.5
 
-# Below this the car has no meaningful direction of travel, so the
-# camera holds its last one instead of spinning on the spot.
-const MIN_TRACK_SPEED := 2.5
+# How far the car's nose has to be off the horizontal before its
+# flattened forward stops meaning anything - nose straight up or
+# straight down, where the camera holds its last heading instead.
+const MIN_HEADING := 0.2
+
+# Reversing looks behind the car rather than through it.
+const REVERSE_SPEED := 6.0
 
 const MOUSE_SENS := 0.0032
 const STICK_SENS := 2.6
@@ -91,8 +101,35 @@ func _unhandled_input(event: InputEvent) -> void:
 		_pitch = clampf(_pitch - event.relative.y * MOUSE_SENS, PITCH_MIN, PITCH_MAX)
 
 
-# Behind the car along its direction of travel, lifted, and offset by
-# however far the player has looked around.
+# The car's own forward, flattened onto the ground so a roll or a pitch
+# does not move the camera. Held where it was while the car is airborne
+# or standing on its nose.
+func _track_nose() -> void:
+	var forward := -target.global_transform.basis.z
+	var flat := Vector3(forward.x, 0.0, forward.z)
+
+	# Nose near-vertical: the flattened forward is meaningless, and
+	# following it would spin the view.
+	if flat.length() < MIN_HEADING:
+		return
+
+	# Mid-flip the car is not pointing anywhere useful either.
+	if not target.is_grounded() and target.angular_velocity.length() > 1.5:
+		return
+
+	flat = flat.normalized()
+
+	# Backing up: look the way the car is travelling, not the way it
+	# faces, or reversing means staring at your own bumper.
+	var reversing := target.linear_velocity.dot(forward) < -REVERSE_SPEED
+	if reversing:
+		flat = -flat
+
+	_heading = flat
+
+
+# Behind the car along its heading, lifted, and offset by however far
+# the player has looked around.
 func _desired_position() -> Vector3:
 	var back := _smoothed.rotated(Vector3.UP, _offset_yaw)
 	var lift := HEIGHT + _pitch * -DISTANCE
@@ -110,12 +147,7 @@ func _process(delta: float) -> void:
 	else:
 		_offset_yaw = lerpf(_offset_yaw, 0.0, RECENTRE * delta)
 
-	# Track the direction of travel, holding the last one while the car
-	# is slow or stationary so the camera does not spin on the spot.
-	var velocity := target.linear_velocity
-	var flat := Vector3(velocity.x, 0.0, velocity.z)
-	if flat.length() > MIN_TRACK_SPEED:
-		_heading = flat.normalized()
+	_track_nose()
 
 	_smoothed = _smoothed.slerp(_heading, clampf(AIM_SPEED * delta, 0.0, 1.0)).normalized()
 

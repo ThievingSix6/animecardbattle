@@ -57,14 +57,24 @@ func _ready() -> void:
 # mountains as individual nodes would cost more than the entire city
 # does.
 func _build_mountains() -> void:
+	var placements := _plan_peaks()
+	if placements.is_empty():
+		return
+
+	# Models from res://art/models/props/mountains/ when there are any:
+	# every file in that folder is a variant, and the placements are
+	# dealt out between them so a ridge is not one shape repeated.
+	var variants := Models.list_props("mountains")
+	if not variants.is_empty():
+		_build_mountain_models(variants, placements)
+		return
+
 	var peak := CylinderMesh.new()
 	peak.top_radius = 0.0
 	peak.bottom_radius = 1.0
 	peak.height = 1.0
 	peak.radial_segments = PEAK_SIDES
 	peak.rings = 1
-
-	var placements := _plan_peaks()
 
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -89,6 +99,57 @@ func _build_mountains() -> void:
 	# and costs a shadow pass over the whole district.
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(node)
+
+
+# One MultiMesh per variant, so N mountain models still cost N draw
+# calls rather than eighty.
+func _build_mountain_models(variants: Array[String], placements: Array[Dictionary]) -> void:
+	for index in variants.size():
+		var name := variants[index]
+		var sample := Models.spawn_prop(name)
+		if sample == null:
+			continue
+
+		var mesh := Models.first_mesh(sample)
+		var material := Models.first_material(sample, Models.PROP_FOLDER + name)
+		sample.queue_free()
+		if mesh == null:
+			continue
+
+		# Deal the placements out round-robin between the variants.
+		var mine: Array[Dictionary] = []
+		for i in placements.size():
+			if i % variants.size() == index:
+				mine.append(placements[i])
+		if mine.is_empty():
+			continue
+
+		var fit := Models.mesh_fit_box(mesh)
+		var per_width := float(fit["per_width"])
+		var per_height := float(fit["per_height"])
+		var base_lift := float(fit["base"])
+
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.mesh = mesh
+		multi.instance_count = mine.size()
+
+		for i in mine.size():
+			var spot: Dictionary = mine[i]
+			var at: Vector3 = spot["pos"]
+			var width := float(spot["width"]) * 2.0
+			var height := float(spot["height"])
+			var spin := float(spot["spin"])
+			var orientation := Basis(Vector3.UP, spin).scaled(
+				Vector3(per_width * width, per_height * height, per_width * width))
+			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+
+		var node := MultiMeshInstance3D.new()
+		node.multimesh = multi
+		if material != null:
+			node.material_override = material
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
 
 
 func _plan_peaks() -> Array[Dictionary]:

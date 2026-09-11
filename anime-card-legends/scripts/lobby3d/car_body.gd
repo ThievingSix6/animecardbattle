@@ -88,8 +88,15 @@ const DRIFT_YAW_BONUS := 1.6
 const GRIP := 28.0
 const DRIFT_GRIP := 4.0
 
+# --- Recovery ----------------------------------------------------------
+# Upside down and barely moving is a dead end, so jump rights the car
+# instead of doing nothing.
+const RECOVER_TILT := 0.35
+const RECOVER_SPEED := 2.6
+const RECOVER_TIME := 0.55
+
 # --- Flips -------------------------------------------------------------
-const FLIP_WINDOW := 1.25
+const FLIP_WINDOW := 1.5
 const FLIP_TORQUE := 5.5
 const FLIP_LOCK := 0.65
 const FLIP_DEADZONE := 0.25
@@ -117,6 +124,7 @@ var _airborne_for := 0.0
 var _jump_held_for := 0.0
 var _flip_lock := 0.0
 var _was_jump_down := false
+var _recovering := 0.0
 
 var _trails: Array[CPUParticles3D] = []
 
@@ -300,6 +308,27 @@ func is_grounded() -> bool:
 	return _grounded
 
 
+# Set by a bot instead of a human. Same fields the player's controls
+# produce, so an AI car drives through exactly the same physics with no
+# special case anywhere below.
+var ai_throttle := 0.0
+var ai_steer := 0.0
+var ai_boost := false
+var ai_drift := false
+var ai_jump := false
+var ai_driven := false
+
+
+func drive_inputs(throttle: float, steer: float, boosting: bool, drifting: bool, jumping: bool) -> void:
+	ai_driven = true
+	driver_seated = true
+	ai_throttle = throttle
+	ai_steer = steer
+	ai_boost = boosting
+	ai_drift = drifting
+	ai_jump = jumping
+
+
 func _physics_process(delta: float) -> void:
 	_read_ground()
 	_apply_suspension()
@@ -315,7 +344,17 @@ func _physics_process(delta: float) -> void:
 	var drifting := Input.is_action_pressed("acl_drift")
 	var boosting := Input.is_action_pressed("acl_boost") and boost > 0.0
 
-	if _grounded:
+	if ai_driven:
+		throttle = ai_throttle
+		steer = ai_steer
+		pitch = 0.0
+		drifting = ai_drift
+		boosting = ai_boost and boost > 0.0
+
+	if _recovering > 0.0:
+		_recovering -= delta
+		_right_the_car(delta)
+	elif _grounded:
 		_airborne_for = 0.0
 		_jumps_used = 0
 		_drive(throttle, boosting)
@@ -460,7 +499,9 @@ func _air_control(pitch: float, yaw_or_roll: float, rolling: bool, delta: float)
 	# Damping only applies on an axis that is not being driven, which is
 	# what makes RL's air control hold a rotation instead of snapping
 	# back to level.
-	local.x += (TORQUE_PITCH * pitch - DAMP_PITCH * local.x * (1.0 - absf(pitch))) * delta
+	# Negated: a positive rotation about the car's right axis drops the
+	# nose, so stick-up would tilt the car down without this.
+	local.x += (TORQUE_PITCH * -pitch - DAMP_PITCH * local.x * (1.0 - absf(pitch))) * delta
 	local.y += (TORQUE_YAW * yaw - DAMP_YAW * local.y * (1.0 - absf(yaw))) * delta
 	local.z += (TORQUE_ROLL * roll - DAMP_ROLL * local.z * (1.0 - absf(roll))) * delta
 
@@ -474,8 +515,19 @@ func _air_control(pitch: float, yaw_or_roll: float, rolling: bool, delta: float)
 
 func _handle_jump(delta: float) -> void:
 	var down := Input.is_action_pressed("acl_jump")
+	if ai_driven:
+		down = ai_jump
+		ai_jump = false
 	var pressed := down and not _was_jump_down
 	_was_jump_down = down
+
+	if _recovering > 0.0:
+		return
+
+	# Landed on its roof: jump rights it rather than doing nothing.
+	if pressed and _is_stranded():
+		_start_recovery()
+		return
 
 	# Holding jump keeps pushing for a fifth of a second - that is what
 	# makes RL's jump height depend on how long the button is held.
@@ -502,6 +554,47 @@ func _handle_jump(delta: float) -> void:
 		_second_jump()
 	else:
 		_flip(throttle, steer)
+
+
+# Upside down, or nearly, and not going anywhere.
+func _is_stranded() -> bool:
+	if global_transform.basis.y.dot(Vector3.UP) > RECOVER_TILT:
+		return false
+	return _grounded or linear_velocity.length() < MAX_SPEED_NO_BOOST * 0.08
+
+
+func _start_recovery() -> void:
+	_recovering = RECOVER_TIME
+	_jumps_used = 2
+	_flip_lock = 0.0
+	# A nudge off the ground, so it rolls clear instead of grinding on
+	# its roof.
+	linear_velocity += Vector3.UP * RL_JUMP_IMPULSE * UU * 0.6
+	Audio.play("click")
+
+
+# Rotates the shortest way back to level, about the axis between where
+# its roof points and where up is.
+func _right_the_car(delta: float) -> void:
+	var up := global_transform.basis.y
+	var axis := up.cross(Vector3.UP)
+	if axis.length() < 0.001:
+		# Exactly inverted: no unique shortest way, so pick the car's
+		# own length as the axis and roll it end over end.
+		axis = global_transform.basis.z
+	axis = axis.normalized()
+
+	var error := up.angle_to(Vector3.UP)
+	angular_velocity = axis * minf(error / maxf(RECOVER_TIME, 0.01), MAX_ANGULAR) * RECOVER_SPEED * 0.5
+
+	# Held up just long enough to finish the roll.
+	apply_central_force(Vector3.UP * mass * 9.8 * gravity_scale * 0.45)
+
+	if error < 0.25:
+		_recovering = 0.0
+		angular_velocity = Vector3.ZERO
+	elif delta <= 0.0:
+		_recovering = 0.0
 
 
 func _jump() -> void:
@@ -533,7 +626,7 @@ func _flip(throttle: float, steer: float) -> void:
 	linear_velocity -= flat * 0.25
 	linear_velocity += direction * RL_DODGE_IMPULSE * UU
 
-	angular_velocity = (frame.x * aim.y - frame.z * aim.x).normalized() * FLIP_TORQUE
+	angular_velocity = (frame.x * -aim.y - frame.z * aim.x).normalized() * FLIP_TORQUE
 	Audio.play("click")
 
 
