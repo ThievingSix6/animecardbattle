@@ -28,6 +28,37 @@ const NEAR_HEIGHT := 0.34      # multiples of the city's half-width
 const FAR_HEIGHT := 0.52
 const PEAK_SIDES := 6
 
+# --- The plain ------------------------------------------------------
+#
+# The land outside the walls used to be one flat disc, which is what made
+# the world read as a tabletop with a city glued to it. It is a real
+# surface now: a grid displaced by noise into low rolling hills, with
+# tufts of grass standing on it so there is something between the eye and
+# the ground plane.
+#
+# Two places have to stay dead level or what is built on them would be
+# swallowed: the ring immediately around the city, and the corridor the
+# causeway runs down to the stadium. Both are flattened here rather than
+# fought with later.
+const PLAIN_RADIUS := 4.2      # multiples of the city's half-width
+const PLAIN_GRID := 96         # vertices per side; 18k triangles
+const HILL_HEIGHT := 0.075     # multiples of the city's half-width
+const HILL_SCALE := 0.55       # multiples of the city's half-width, per hill
+const FLAT_RADIUS := 1.12      # level out to here
+const FLAT_FADE := 0.7         # and rising over this much more
+
+# The causeway corridor, both in multiples of the city's half-width.
+const ROAD_HALF_WIDTH := 1.05
+const ROAD_LENGTH := 4.0
+
+# --- Grass ------------------------------------------------------------
+const TUFT_COUNT := 5200
+const TUFT_HEIGHT := 2.6       # metres
+const TUFT_WIDTH := 3.4
+# Tufts are only worth drawing where they can be seen; past this they are
+# smaller than a pixel and cost a draw for nothing.
+const TUFT_RADIUS := 2.4       # multiples of the city's half-width
+
 # --- Haze dome ------------------------------------------------------
 const DOME_RADIUS := 3.4       # multiples of the city's half-width
 const HAZE_TOP := Color(0.30, 0.10, 0.55, 0.0)
@@ -58,10 +89,29 @@ static func with_pass(half_width: float, direction: Vector3, arc: float) -> Hori
 	return horizon
 
 
+# The plain's shape, made before anything is placed on it so the
+# mountains can be seated on the hills rather than hovering over them.
+var _noise: FastNoiseLite
+var _plain_base := 0.0
+
+
 func _ready() -> void:
+	_plain_base = -city_half * 0.02 - 1.0
+	_noise = FastNoiseLite.new()
+	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	_noise.frequency = 1.0 / maxf(city_half * HILL_SCALE, 1.0)
+	_noise.fractal_octaves = 3
+	_noise.seed = 20260911
+
 	_build_mountains()
 	_build_haze_dome()
 	_build_ground_beyond()
+
+
+# Where the surface of the plain is at a point, in this node's space.
+# Mountains stand on it and grass grows out of it, so both ask here.
+func ground_height(x: float, z: float) -> float:
+	return _plain_base + _plain_height(x, z)
 
 
 # --- Mountains -------------------------------------------------------
@@ -193,8 +243,12 @@ func _ring(rng: RandomNumberGenerator, count: int, radius_scale: float,
 		var jitter := city_half * 0.07
 		var at := Vector3(
 			cos(angle) * radius + rng.randf_range(-jitter, jitter),
-			-city_half * 0.02,
+			0.0,
 			sin(angle) * radius + rng.randf_range(-jitter, jitter))
+		# Stood on the rolling plain rather than on the flat disc it used
+		# to be, or the far ring would hang twenty-five metres clear of
+		# the ground it is supposed to be growing out of.
+		at.y = ground_height(at.x, at.z)
 
 		# Inside the pass, so the causeway is not blocked by a mountain.
 		if _in_pass(at):
@@ -264,14 +318,163 @@ func _haze_gradient() -> GradientTexture2D:
 # The district's own ground stops at its wall. This is the land the
 # mountains stand on, so there is no visible edge to fall off.
 func _build_ground_beyond() -> void:
+	var span := city_half * PLAIN_RADIUS
+
 	var plain := MeshInstance3D.new()
-	var disc := CylinderMesh.new()
-	disc.top_radius = city_half * FAR_RADIUS * 2.4
-	disc.bottom_radius = disc.top_radius
-	disc.height = 2.0
-	disc.radial_segments = 48
-	plain.mesh = disc
-	plain.position.y = -city_half * 0.02 - 1.0
-	plain.material_override = Textures.grass(city_half * 2.0, Color("#16241c"))
+	plain.mesh = _plain_mesh(span)
+	plain.position.y = _plain_base
+	# Tiled by the real width of the surface. It used to be told the
+	# city's width for a disc three kilometres across, so one tile of
+	# grass was stretched over seventy-five metres of ground.
+	plain.material_override = Textures.grass(span * 2.0, Color("#16241c"))
 	plain.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(plain)
+
+	_build_grass(plain)
+
+
+# A square grid displaced by noise. Anything past PLAIN_RADIUS is behind
+# the mountains and inside the haze either way, so the square edge of it
+# is never in shot.
+func _plain_mesh(span: float) -> ArrayMesh:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+
+	var step := span * 2.0 / float(PLAIN_GRID - 1)
+
+	for iz in PLAIN_GRID:
+		for ix in PLAIN_GRID:
+			var x := -span + step * float(ix)
+			var z := -span + step * float(iz)
+			verts.append(Vector3(x, _plain_height(x, z), z))
+			normals.append(_plain_normal(x, z, step))
+			uvs.append(Vector2(float(ix), float(iz)) / float(PLAIN_GRID - 1))
+
+	for iz in PLAIN_GRID - 1:
+		for ix in PLAIN_GRID - 1:
+			var here := iz * PLAIN_GRID + ix
+			var below := here + PLAIN_GRID
+			indices.push_back(here)
+			indices.push_back(below)
+			indices.push_back(here + 1)
+			indices.push_back(here + 1)
+			indices.push_back(below)
+			indices.push_back(below + 1)
+
+	var surface: Array = []
+	surface.resize(Mesh.ARRAY_MAX)
+	surface[Mesh.ARRAY_VERTEX] = verts
+	surface[Mesh.ARRAY_NORMAL] = normals
+	surface[Mesh.ARRAY_TEX_UV] = uvs
+	surface[Mesh.ARRAY_INDEX] = indices
+
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface)
+	return mesh
+
+
+# The normal at a point, taken from the slope of the height function
+# either side of it. Real normals are the entire point of the exercise:
+# with a flat Vector3.UP at every vertex the hills would still be lit as
+# though they were the disc this replaced, and none of the relief would
+# show.
+func _plain_normal(x: float, z: float, step: float) -> Vector3:
+	var reach := maxf(step, 0.01)
+	var slope_x := (_plain_height(x + reach, z) - _plain_height(x - reach, z)) / (reach * 2.0)
+	var slope_z := (_plain_height(x, z + reach) - _plain_height(x, z - reach)) / (reach * 2.0)
+	return Vector3(-slope_x, 1.0, -slope_z).normalized()
+
+
+# How high the land stands at a point. Zero under the city and under the
+# causeway, rolling everywhere else.
+func _plain_height(x: float, z: float) -> float:
+	var ramp := minf(_city_ramp(x, z), _road_ramp(x, z))
+	if ramp <= 0.0:
+		return 0.0
+	return _noise.get_noise_2d(x, z) * city_half * HILL_HEIGHT * ramp
+
+
+# 0 inside the city's ring, rising to 1 over FLAT_FADE beyond it.
+func _city_ramp(x: float, z: float) -> float:
+	var distance := Vector2(x, z).length() / maxf(city_half, 1.0)
+	return clampf((distance - FLAT_RADIUS) / maxf(FLAT_FADE, 0.01), 0.0, 1.0)
+
+
+# The same, across the causeway's corridor. Returns 1 - no flattening -
+# when there is no pass, which is how a city with no stadium behaves.
+func _road_ramp(x: float, z: float) -> float:
+	if gap_direction == Vector3.ZERO:
+		return 1.0
+
+	var here := Vector2(x, z)
+	var out_direction := Vector2(gap_direction.x, gap_direction.z)
+	var along := here.dot(out_direction) / maxf(city_half, 1.0)
+	if along <= 0.0 or along > ROAD_LENGTH:
+		return 1.0
+
+	var side := Vector2(-out_direction.y, out_direction.x)
+	var across := absf(here.dot(side)) / maxf(city_half, 1.0)
+	return clampf((across - ROAD_HALF_WIDTH) / maxf(FLAT_FADE, 0.01), 0.0, 1.0)
+
+
+# --- Grass ------------------------------------------------------------
+
+# Crossed quads, one MultiMesh, seated on the plain's own surface. Two
+# quads at right angles read as a tuft from any direction, which is the
+# oldest trick there is and still the cheapest.
+func _build_grass(plain: MeshInstance3D) -> void:
+	var texture := Textures.get_texture("grass")
+	if texture == null:
+		return
+
+	var blade := QuadMesh.new()
+	blade.size = Vector2(TUFT_WIDTH, TUFT_HEIGHT)
+	blade.center_offset = Vector3(0.0, TUFT_HEIGHT * 0.5, 0.0)
+
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = texture
+	mat.albedo_color = Color("#2f5a38").lerp(Color.WHITE, 0.5)
+	# Cut out rather than blended: an alpha-blended tuft has to be sorted
+	# against every other tuft, and five thousand of them cannot be.
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	mat.alpha_scissor_threshold = 0.4
+	# Seen from both sides, and lit on both, or half of every tuft is a
+	# black rectangle.
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.roughness = 0.95
+
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = blade
+	multi.instance_count = TUFT_COUNT * 2
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("plain-grass")
+	var reach := city_half * TUFT_RADIUS
+	var inner := city_half * FLAT_RADIUS
+
+	for i in TUFT_COUNT:
+		# Sampled on the ring between the wall and TUFT_RADIUS BY AREA -
+		# the square root is what stops them bunching towards the middle.
+		var angle := rng.randf() * TAU
+		var area := lerpf(inner * inner, reach * reach, rng.randf())
+		var radius: float = sqrt(area)
+		var x := cos(angle) * radius
+		var z := sin(angle) * radius
+		var at := Vector3(x, _plain_height(x, z), z)
+
+		var spin := rng.randf() * TAU
+		var size := rng.randf_range(0.7, 1.5)
+		var frame := Basis(Vector3.UP, spin).scaled(Vector3(size, size, size))
+		multi.set_instance_transform(i * 2, Transform3D(frame, at))
+		# The second quad crossed through the first.
+		var crossed := Basis(Vector3.UP, spin + PI * 0.5).scaled(Vector3(size, size, size))
+		multi.set_instance_transform(i * 2 + 1, Transform3D(crossed, at))
+
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = multi
+	node.material_override = mat
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	plain.add_child(node)
