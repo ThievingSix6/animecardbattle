@@ -59,10 +59,20 @@ const PARK_CHANCE := 0.55
 const TREE_HEIGHT_MIN := 9.0
 const TREE_HEIGHT_MAX := 18.0
 
-# Anything in props/scatter/, spread along the kerbs.
-const SCATTER_COUNT := 90
+# Anything in props/scatter/, spread along the pavements.
+const SCATTER_COUNT := 120
 const SCATTER_HEIGHT_MIN := 3.0
 const SCATTER_HEIGHT_MAX := 7.0
+# How far in from a block's edge a prop stands, so it is on the
+# pavement rather than in the gutter.
+const PAVEMENT_INSET := 3.0
+# Empty lots get a prop or two as well, so a gap reads as a yard.
+const LOT_PROP_CHANCE := 0.45
+
+# The pavement stands proud of the road, with a kerb down to it.
+# Visual only: a kerb the car has to climb and the player cannot step
+# up is an obstacle course, not a city.
+const PAVEMENT_RISE := 0.55
 
 # Most of the city is low. The handful of towers are what make the
 # skyline, and they cluster toward the middle.
@@ -388,6 +398,8 @@ func _build_streets() -> void:
 			_street_lamp(Vector3(offset, 0.0, along))
 			lights += 2
 
+	_build_pavements()
+
 	var plaza := MeshInstance3D.new()
 	var disc := CylinderMesh.new()
 	disc.top_radius = PLAZA_RADIUS
@@ -403,6 +415,43 @@ func _build_streets() -> void:
 	plaza_mat.metallic = 0.2
 	plaza.material_override = plaza_mat
 	add_child(plaza)
+
+
+# A raised slab over each block, so the pavement stands proud of the
+# carriageway with a kerb down to it. One MultiMesh for the lot.
+#
+# No collision: a kerb the car has to climb and the player cannot step
+# up is an obstacle course rather than a city, and the flat ground
+# collider underneath keeps everything moving cleanly.
+func _build_pavements() -> void:
+	var slab := BoxMesh.new()
+	slab.size = Vector3(BLOCK_SIZE, PAVEMENT_RISE * 2.0, BLOCK_SIZE)
+
+	var blocks: Array[Vector3] = []
+	for gx in range(-BLOCKS_OUT, BLOCKS_OUT + 1):
+		for gz in range(-BLOCKS_OUT, BLOCKS_OUT + 1):
+			var at := Vector3(float(gx) * BLOCK_PITCH, 0.0, float(gz) * BLOCK_PITCH)
+			# The plaza is its own surface.
+			if Vector2(at.x, at.z).length() < PLAZA_RADIUS:
+				continue
+			blocks.append(at)
+
+	if blocks.is_empty():
+		return
+
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = slab
+	multi.instance_count = blocks.size()
+
+	for i in blocks.size():
+		# Half-sunk, so only the top PAVEMENT_RISE shows as a kerb.
+		multi.set_instance_transform(i, Transform3D(Basis.IDENTITY, blocks[i]))
+
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = multi
+	node.material_override = Textures.sidewalk(BLOCK_SIZE, Color("#161a26"))
+	add_child(node)
 
 
 func _street_strip(at: Vector3, size: Vector3, avenue: bool) -> void:
@@ -466,6 +515,18 @@ func _street_lamp(at: Vector3) -> void:
 # calls; this is one.
 
 func _build_skyline() -> void:
+	var placements := _plan_skyline()
+	if placements.is_empty():
+		return
+
+	# Any number of models in props/skyline/ become the city's stock of
+	# buildings, dealt out between the lots. That is what stops a
+	# district being one shape repeated four hundred times.
+	var pool := Models.list_props("skyline")
+	if not pool.is_empty():
+		_build_skyline_pool(pool, placements)
+		return
+
 	var model := Models.spawn_prop("building")
 	var mesh: Mesh = null
 	var material: Material = null
@@ -480,10 +541,6 @@ func _build_skyline() -> void:
 		var box := BoxMesh.new()
 		box.size = Vector3(1.0, 1.0, 1.0)
 		mesh = box
-
-	var placements := _plan_skyline()
-	if placements.is_empty():
-		return
 
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
@@ -547,6 +604,74 @@ func _build_skyline() -> void:
 		mat.metallic = 0.15
 		node.material_override = mat
 	add_child(node)
+
+
+# One MultiMesh per building model, plus the collision and signage the
+# single-model path builds. Footprint and height stay independent here
+# - a tower IS meant to be told how tall to be, unlike a bench.
+func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> void:
+	var body := StaticBody3D.new()
+	add_child(body)
+
+	var signs := 0
+
+	for index in pool.size():
+		var model_name := pool[index]
+		var sample := Models.spawn_prop(model_name)
+		if sample == null:
+			continue
+
+		var mesh := Models.first_mesh(sample)
+		var material := Models.first_material(sample, Models.PROP_FOLDER + model_name)
+		sample.queue_free()
+		if mesh == null:
+			continue
+
+		var mine: Array[Dictionary] = []
+		for i in placements.size():
+			if i % pool.size() == index:
+				mine.append(placements[i])
+		if mine.is_empty():
+			continue
+
+		var fit := Models.mesh_fit_box(mesh)
+		var per_width := float(fit["per_width"])
+		var per_height := float(fit["per_height"])
+		var base_lift := float(fit["base"])
+
+		var multi := MultiMesh.new()
+		multi.transform_format = MultiMesh.TRANSFORM_3D
+		multi.mesh = mesh
+		multi.instance_count = mine.size()
+
+		for i in mine.size():
+			var spot: Dictionary = mine[i]
+			var at: Vector3 = spot["pos"]
+			var height := float(spot["height"])
+			var width := float(spot["width"])
+			var spin := float(spot["spin"])
+
+			var orientation := Basis(Vector3.UP, spin).scaled(
+				Vector3(per_width * width, per_height * height, per_width * width))
+			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+
+			var shape := CollisionShape3D.new()
+			var box_shape := BoxShape3D.new()
+			box_shape.size = Vector3(width, height, width)
+			shape.shape = box_shape
+			shape.position = at + Vector3(0.0, height * 0.5, 0.0)
+			body.add_child(shape)
+
+			if signs < MAX_NEON_SIGNS and Vector2(at.x, at.z).length() < LIT_RADIUS:
+				if _rng.randf() < 0.65:
+					_build_neon(at, height, width, spin, signs % NEON_LIGHT_EVERY == 0)
+					signs += 1
+
+		var node := MultiMeshInstance3D.new()
+		node.multimesh = multi
+		if material != null:
+			node.material_override = material
+		add_child(node)
 
 
 # Four lots to a block, with alleys between them, the odd lot left
@@ -864,7 +989,9 @@ func _build_landmark() -> void:
 	var model := Models.spawn_prop("statue")
 	if model != null:
 		root.add_child(model)
-		Models.fit_box(model, width, height)
+		# Upright and undistorted: the supplied statue is Z-up, and
+		# fit_box would have squashed it to a cube anyway.
+		Models.fit_upright(model, "statue", height)
 	else:
 		_build_obelisk(root, width, height)
 
@@ -953,7 +1080,7 @@ func _build_parks() -> void:
 		_build_simple_trees(placements)
 		return
 
-	_build_model_clusters(trees, placements, 0.55)
+	_build_model_clusters(trees, placements)
 
 
 func _build_park_ground(at: Vector3) -> void:
@@ -1009,36 +1136,60 @@ func _build_scatter() -> void:
 		return
 
 	var placements: Array[Dictionary] = []
-	for i in SCATTER_COUNT:
-		var angle := _rng.randf_range(0.0, TAU)
-		var distance := _rng.randf_range(PLAZA_RADIUS * 1.4, CITY_HALF * 0.8)
-		var at := Vector3(cos(angle) * distance, 0.0, sin(angle) * distance)
 
-		# Pushed to the kerb, so props line the roads instead of
-		# standing in the middle of them.
-		at.x = _kerb(at.x)
+	# On the pavement, along a block's edge. Picking a random point and
+	# nudging one axis to a kerb left the other axis free, which is how
+	# props ended up standing in the middle of the cross street.
+	for i in SCATTER_COUNT:
+		var spot := _pavement_spot()
+		if spot == Vector3.ZERO:
+			continue
 		placements.append({
-			"pos": at,
+			"pos": spot,
 			"height": _rng.randf_range(SCATTER_HEIGHT_MIN, SCATTER_HEIGHT_MAX),
 			"spin": _rng.randf_range(0.0, TAU),
 		})
 
-	_build_model_clusters(props, placements, 0.7)
+	# And a few filling the empty lots, so a gap is a yard rather than
+	# a hole.
+	for lot in _empty_lots:
+		if _rng.randf() > LOT_PROP_CHANCE:
+			continue
+		placements.append({
+			"pos": lot + Vector3(
+				_rng.randf_range(-LOT_SIZE * 0.3, LOT_SIZE * 0.3), 0.0,
+				_rng.randf_range(-LOT_SIZE * 0.3, LOT_SIZE * 0.3)),
+			"height": _rng.randf_range(SCATTER_HEIGHT_MIN, SCATTER_HEIGHT_MAX),
+			"spin": _rng.randf_range(0.0, TAU),
+		})
+
+	_build_model_clusters(props, placements)
 
 
-# Nudges a coordinate to just off the nearest street centre line.
-func _kerb(value: float) -> float:
-	# roundf, not round: round() returns Variant, which cannot be
-	# inferred from and poisons the whole expression.
-	var line := (roundf(value / BLOCK_PITCH + 0.5) - 0.5) * BLOCK_PITCH
-	var side := 1.0
-	if value < line:
-		side = -1.0
-	return line + side * (STREET_WIDTH * 0.5 + 2.0)
+# A point on a block's pavement: inside the block's own footprint, a
+# little in from its edge, so it is never on the carriageway.
+func _pavement_spot() -> Vector3:
+	var gx := _rng.randi_range(-BLOCKS_OUT, BLOCKS_OUT)
+	var gz := _rng.randi_range(-BLOCKS_OUT, BLOCKS_OUT)
+	var block := Vector3(float(gx) * BLOCK_PITCH, 0.0, float(gz) * BLOCK_PITCH)
+
+	# Inside the plaza the blocks are storefronts, not pavement.
+	if Vector2(block.x, block.z).length() < STOREFRONT_RING + 20.0:
+		return Vector3.ZERO
+
+	var inset := BLOCK_SIZE * 0.5 - PAVEMENT_INSET
+	var along := _rng.randf_range(-inset, inset)
+
+	# One of the block's four edges.
+	match _rng.randi() % 4:
+		0: return block + Vector3(along, 0.0, -inset)
+		1: return block + Vector3(along, 0.0, inset)
+		2: return block + Vector3(-inset, 0.0, along)
+		_: return block + Vector3(inset, 0.0, along)
 
 
 # One MultiMesh per model, placements dealt out between them.
-func _build_model_clusters(names: Array[String], placements: Array[Dictionary], width_ratio: float) -> void:
+func _build_model_clusters(names: Array[String], placements: Array[Dictionary]) -> void:
 	if names.is_empty() or placements.is_empty():
 		return
 
@@ -1061,11 +1212,6 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary], 
 		if mine.is_empty():
 			continue
 
-		var fit := Models.mesh_fit_box(mesh)
-		var per_width := float(fit["per_width"])
-		var per_height := float(fit["per_height"])
-		var base_lift := float(fit["base"])
-
 		var multi := MultiMesh.new()
 		multi.transform_format = MultiMesh.TRANSFORM_3D
 		multi.mesh = mesh
@@ -1076,10 +1222,17 @@ func _build_model_clusters(names: Array[String], placements: Array[Dictionary], 
 			var at: Vector3 = spot["pos"]
 			var height := float(spot["height"])
 			var spin := float(spot["spin"])
-			var orientation := Basis(Vector3.UP, spin).scaled(
-				Vector3(per_width * height * width_ratio, per_height * height,
-					per_width * height * width_ratio))
-			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * base_lift * height))
+
+			# Uniform, and stood upright if the model came in Z-up.
+			# Scaling a bench's width and height independently to hit a
+			# target height is what turned these into thin slabs on
+			# their sides.
+			var fit := Models.mesh_fit_upright(mesh, prop_name, height)
+			var scale := float(fit["scale"])
+			var upright: Vector3 = fit["rotation"]
+			var frame := Basis.from_euler(upright)
+			var orientation := Basis(Vector3.UP, spin) * frame.scaled(Vector3(scale, scale, scale))
+			multi.set_instance_transform(i, Transform3D(orientation, at + Vector3.UP * float(fit["base"])))
 
 		var node := MultiMeshInstance3D.new()
 		node.multimesh = multi

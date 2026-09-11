@@ -439,6 +439,74 @@ static func _light_material(material: BaseMaterial3D, texture: Texture2D, energy
 	material.emission_energy_multiplier = RenderMode.emission(energy)
 
 
+# --- Orientation -----------------------------------------------------------
+#
+# Plenty of models arrive Z-up: authored in a tool whose up axis is Z,
+# exported without the conversion. In Godot they lie on their face.
+#
+# Detected from the bounding box - a model whose Z extent is clearly
+# greater than its Y extent is standing on its back - and overridable
+# from the filename, because a guess is a guess:
+#
+#     Japanese_Sign_01_zup.glb   always rotated upright
+#     Terrain_Patch_yup.glb      never rotated
+#
+# Something wide and flat that really is Y-up, like a terrain patch,
+# is the case the guess gets wrong, so that is what _yup is for.
+
+const ZUP_RATIO := 1.2
+
+
+static func upright_rotation(box: AABB, model_name: String) -> Vector3:
+	var lower := model_name.to_lower()
+	if lower.ends_with("_yup"):
+		return Vector3.ZERO
+	if lower.ends_with("_zup"):
+		return Vector3(-PI * 0.5, 0.0, 0.0)
+
+	if box.size.z > box.size.y * ZUP_RATIO and box.size.y <= box.size.x:
+		return Vector3(-PI * 0.5, 0.0, 0.0)
+	return Vector3.ZERO
+
+
+# A box after a rotation: the eight corners moved, then re-bounded.
+static func rotated_aabb(box: AABB, rotation: Vector3) -> AABB:
+	if rotation == Vector3.ZERO:
+		return box
+
+	var frame := Basis.from_euler(rotation)
+	var first := frame * box.position
+	var out := AABB(first, Vector3.ZERO)
+
+	for i in 8:
+		out = out.expand(frame * box.get_endpoint(i))
+	return out
+
+
+# Everything a MultiMesh needs to stand one mesh upright at a given
+# height WITHOUT distorting it: the rotation, one uniform scale, and
+# how far to lift it so its base rests on the ground.
+#
+# Uniform is the whole point. Scaling a bench's width and height
+# independently to hit a target height is what turned the props into
+# tall thin slabs lying on their sides.
+static func mesh_fit_upright(mesh: Mesh, model_name: String, target_height: float) -> Dictionary:
+	var raw := mesh.get_aabb()
+	var rotation := upright_rotation(raw, model_name)
+	var box := rotated_aabb(raw, rotation)
+
+	var scale := 1.0
+	if box.size.y > 0.0001:
+		scale = target_height / box.size.y
+
+	return {
+		"rotation": rotation,
+		"scale": scale,
+		"base": -box.position.y * scale,
+		"size": box.size * scale,
+	}
+
+
 # --- Measuring and fitting -----------------------------------------------
 
 # The bounding box of everything drawable under `root`, in root space.
@@ -532,6 +600,23 @@ static func fit_length(node: Node3D, target_length: float) -> float:
 	node.scale = Vector3(factor, factor, factor)
 	node.position.y -= box.position.y * factor
 	return factor
+
+
+# Stands a node upright if it came in Z-up, then fits it to a height
+# WITHOUT distorting it. For props, statues, anything whose proportions
+# are part of the model rather than something to be dictated.
+static func fit_upright(node: Node3D, model_name: String, target_height: float) -> void:
+	var raw := _collect(node, node)
+	var rotation := upright_rotation(raw, model_name)
+	node.rotation = rotation
+
+	var box := rotated_aabb(raw, rotation)
+	if box.size.y <= 0.0001:
+		return
+
+	var factor := target_height / box.size.y
+	node.scale = Vector3(factor, factor, factor)
+	node.position.y -= box.position.y * factor
 
 
 # The footprint of a fitted model, for building a collision box that

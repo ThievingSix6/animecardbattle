@@ -38,8 +38,14 @@ const CAR_WIDTH := 84.2 * UU
 const CAR_HEIGHT := 36.16 * UU
 const CAR_MASS := 180.0
 
-# The supplied model faces +Z, so it is turned to face Godot's forward.
-const MODEL_YAW := PI
+# The supplied car.glb is 1.40 long on X against 0.60 on Z, so its
+# LENGTH runs along X - it needed a quarter turn, not a half one, which
+# is why it sat sideways. Flip the sign if it drives backwards.
+const MODEL_YAW := PI * 0.5
+# For a model that is also tipped over. Rarely needed; here so it does
+# not have to be hunted for when it is.
+const MODEL_PITCH := 0.0
+const MODEL_ROLL := 0.0
 
 # --- Rocket League's numbers, in uu -----------------------------------
 const RL_GRAVITY := 650.0
@@ -180,13 +186,20 @@ func _build_shell() -> void:
 
 	var model := Models.spawn_prop("car")
 	if model != null:
-		_shell.add_child(model)
+		# Rotated FIRST, then measured. Fitting before rotating meant
+		# the seat height was computed for the wrong axis, so a turned
+		# model ended up half-buried in the road.
+		model.rotation = Vector3(MODEL_PITCH, MODEL_YAW, MODEL_ROLL)
+
+		var holder := Node3D.new()
+		_shell.add_child(holder)
+		holder.add_child(model)
+
 		# Uniform, so an imported car is never stretched.
-		Models.fit_length(model, CAR_LENGTH)
-		model.rotation.y = MODEL_YAW
-		# fit_length seats the model on y = 0; its wheels belong on the
-		# ground, which is RIDE_HEIGHT below the body's origin.
-		model.position.y -= RIDE_HEIGHT
+		Models.fit_length(holder, CAR_LENGTH)
+		# The model is seated on y = 0; its wheels belong on the ground,
+		# which is RIDE_HEIGHT below the body's origin.
+		holder.position.y -= RIDE_HEIGHT
 		return
 
 	_build_placeholder()
