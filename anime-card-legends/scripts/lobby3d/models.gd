@@ -767,6 +767,88 @@ static func fitted_size(node: Node3D) -> Vector3:
 	return (node.transform * _collect(node, node)).size
 
 
+# --- Outliers --------------------------------------------------------------
+#
+# One stray mesh can make a model unfittable. stadium.glb is the example:
+# sixteen of its seventeen meshes sit between y = 38 and y = 1580, and the
+# seventeenth runs from y = -1362 to y = 3299. Fitting to the full
+# bounding box therefore sized the stadium against a 4661-unit height that
+# only one mesh ever reaches, so the bowl came out at a quarter of the
+# size it should be AND floating sixty metres in the air.
+#
+# The fix is to fit to where the geometry actually IS. Per-mesh boxes are
+# collected and the extremes are trimmed off each axis before the bounds
+# are taken, which is the difference between measuring a stadium and
+# measuring a stadium plus one enormous stray plane.
+
+const DEFAULT_TRIM := 0.12
+
+
+# Every drawable's own box, in the model's parent space.
+static func _mesh_boxes(root: Node3D, frame: Transform3D) -> Array[AABB]:
+	var boxes: Array[AABB] = []
+	_gather_boxes(root, root, boxes)
+	for i in boxes.size():
+		boxes[i] = frame * boxes[i]
+	return boxes
+
+
+static func _gather_boxes(node: Node, root: Node, into: Array[AABB]) -> void:
+	if node is VisualInstance3D:
+		var vis: VisualInstance3D = node
+		var box := vis.get_aabb()
+		if box.size != Vector3.ZERO:
+			into.append(_relative_transform(vis, root) * box)
+	for child in node.get_children():
+		_gather_boxes(child, root, into)
+
+
+# The box holding the BULK of a model, with `trim` of the meshes ignored
+# at each end of each axis. Falls back to the plain bounding box when
+# there are too few meshes for trimming to mean anything.
+static func trimmed_aabb(root: Node3D, trim: float = DEFAULT_TRIM) -> AABB:
+	var frame := model_frame(root)
+	var boxes := _mesh_boxes(root, frame)
+	var count := boxes.size()
+	if count < 4:
+		return _seated_aabb(root, frame)
+
+	var drop := mini(int(floor(float(count) * trim)), (count - 1) / 2)
+
+	var low := Vector3.ZERO
+	var high := Vector3.ZERO
+	for axis in 3:
+		var starts: Array[float] = []
+		var ends: Array[float] = []
+		for box in boxes:
+			starts.append(box.position[axis])
+			ends.append(box.position[axis] + box.size[axis])
+		starts.sort()
+		ends.sort()
+		low[axis] = starts[drop]
+		high[axis] = ends[count - 1 - drop]
+
+	return AABB(low, high - low)
+
+
+# Scales a model uniformly so its longest horizontal axis measures
+# `target_span`, measured across the bulk of its geometry rather than its
+# outliers, and seats that bulk on y = 0. Returns the size it ended up.
+#
+# For the big set pieces - the stadium - where the height is a
+# consequence of the footprint and not something to dictate.
+static func fit_span(node: Node3D, target_span: float) -> Vector3:
+	var frame := model_frame(node)
+	var box := trimmed_aabb(node)
+	var longest := maxf(box.size.x, box.size.z)
+	if longest <= 0.0001:
+		return Vector3.ZERO
+
+	var factor := target_span / longest
+	_seat(node, frame, Vector3(factor, factor, factor), -box.position.y * factor)
+	return box.size * factor
+
+
 # --- Animation -----------------------------------------------------------
 
 static func find_animation_player(root: Node) -> AnimationPlayer:

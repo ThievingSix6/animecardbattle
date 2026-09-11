@@ -27,16 +27,34 @@ const GOAL_HALF_WIDTH := GOAL_WIDTH_UU * 0.5 * CarBody.UU
 const GOAL_HEIGHT := GOAL_HEIGHT_UU * CarBody.UU
 const GOAL_DEPTH := GOAL_DEPTH_UU * CarBody.UU
 
+# --- The stadium model --------------------------------------------------
+# How far the bowl sits back from the ends of the pitch, and then the
+# straight 2x on top of it. One number to turn if it wants to be closer
+# in or further out.
+const STADIUM_MARGIN := 1.2
+const STADIUM_SCALE := 2.0
+
 const MATCH_SECONDS := 300.0
 const KICKOFF_PAUSE := 2.0
 
 # --- Crowd ------------------------------------------------------------
 #
-# soccar_crowd.ogg runs under the whole match, quiet, and swells for a
-# few seconds whenever something happens. The one-shots ride over it.
-const CROWD_BED := 0.35
-const CROWD_SWELL := 1.0
-const CROWD_SETTLE := 0.6      # how fast a swell decays, per second
+# soccar_crowd.ogg is NOT a bed. It used to run under the whole match at
+# a constant level, which turned a stadium full of people into a hiss you
+# stopped hearing within a minute.
+#
+# It is a one-shot now, played when the crowd has a reason - a goal, a
+# big hit - and otherwise at a random quiet moment every so often, the
+# way a real crowd murmurs between passages of play. soccar_gasp is the
+# same: it fires on a near miss, and rarely on its own.
+const CROWD_VOLUME := 0.75
+# A reaction is never cut off by an idle murmur, and two murmurs never
+# stack: one crowd sound at a time.
+const CROWD_GAP_MIN := 22.0
+const CROWD_GAP_MAX := 55.0
+const CROWD_IDLE_VOLUME := 0.3
+# Roughly one idle murmur in five is a gasp rather than a swell.
+const GASP_CHANCE := 0.2
 
 # A shot that beats the keeper and misses the mouth: past the goal line
 # by depth, outside the posts, and travelling.
@@ -61,15 +79,18 @@ var _over := false
 var _bot_brain: ArenaBot
 
 var _crowd: AudioStreamPlayer
-var _crowd_level := CROWD_BED
+var _crowd_quiet := 0.0
 var _near_miss_cooldown := 0.0
 var _warned := false
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	if not GameState.has_active_slot():
 		call_deferred("_bounce")
 		return
+
+	_rng.randomize()
 
 	Audio.play_music("music_battle")
 	_build_environment()
@@ -164,15 +185,31 @@ func _build_pitch() -> void:
 	_paint_markings()
 
 
-# The supplied stadium, wrapped around the pitch. Purely visual.
+# The supplied stadium, wrapped around the pitch. Purely visual - the
+# collision boxes above are still what the cars and the ball bounce off.
+#
+# Sized from its FOOTPRINT, not its height, and the footprint is measured
+# across the bulk of the model rather than its full bounding box. One
+# stray mesh in stadium.glb runs four times the height of the actual
+# bowl; fitting to that made the stadium a quarter of the size it should
+# be and floated it sixty metres up, which is why it read as a lump in
+# the middle of the pitch with the cars kicking off outside it.
+#
+# The model's long axis is its X, the pitch's long axis is Z, so it also
+# needs a quarter turn to line the two up.
 func _build_stadium_shell() -> void:
 	var model := Models.spawn_prop("stadium")
 	if model == null:
 		return
 
 	add_child(model)
-	# Sized so the pitch sits inside it rather than the other way round.
-	Models.fit_upright(model, "stadium", CEILING * 1.35)
+
+	# Long enough to swallow the pitch end to end, with room for the
+	# stands to sit back off the touchlines.
+	var span := HALF_LENGTH * 2.0 * STADIUM_MARGIN * STADIUM_SCALE
+	Models.fit_span(model, span)
+	Models.spin(model, PI * 0.5)
+
 	# Dropped a little, so the stands rise from below the pitch surface.
 	model.position.y -= CEILING * 0.08
 
@@ -321,8 +358,8 @@ func _build_hud() -> void:
 	add_child(hud)
 	hud.set_score(0, 0)
 
-	_crowd = Audio.loop("soccar_crowd")
-	_apply_crowd()
+	_crowd = Audio.voice("soccar_crowd")
+	_hold_crowd()
 
 
 # --- Match flow ---------------------------------------------------------
@@ -370,7 +407,7 @@ func _process(delta: float) -> void:
 			hud.announce("30 SECONDS")
 
 	_watch_for_near_miss(delta)
-	_settle_crowd(delta)
+	_idle_crowd(delta)
 
 	if _clock <= 0.0:
 		_finish()
@@ -432,22 +469,47 @@ func _watch_for_near_miss(delta: float) -> void:
 	_swell(0.5)
 
 
+# The crowd reacting to something that just happened. Loud, and it resets
+# the idle timer so a murmur cannot follow straight on its heels.
 func _swell(amount: float = 1.0) -> void:
-	_crowd_level = maxf(_crowd_level, CROWD_BED + (CROWD_SWELL - CROWD_BED) * amount)
-	_apply_crowd()
+	_play_crowd("soccar_crowd", CROWD_VOLUME * (0.55 + 0.45 * amount))
 
 
-func _settle_crowd(delta: float) -> void:
-	if _crowd_level <= CROWD_BED:
+# Between reactions the crowd is heard now and then and not otherwise.
+# Half a minute or so of nothing is the point: it is what makes the next
+# reaction land.
+func _idle_crowd(delta: float) -> void:
+	_crowd_quiet -= delta
+	if _crowd_quiet > 0.0:
 		return
-	_crowd_level = maxf(CROWD_BED, _crowd_level - CROWD_SETTLE * delta)
-	_apply_crowd()
 
-
-func _apply_crowd() -> void:
-	if _crowd == null:
+	_hold_crowd()
+	if _crowd != null and _crowd.playing:
 		return
-	_crowd.volume_db = linear_to_db(maxf(0.0001, _crowd_level * Settings.sfx_volume))
+
+	var key := "soccar_crowd"
+	if _rng.randf() < GASP_CHANCE:
+		key = "soccar_gasp"
+	_play_crowd(key, CROWD_IDLE_VOLUME)
+
+
+# Quiet again until somewhere between CROWD_GAP_MIN and CROWD_GAP_MAX
+# from now, so the murmurs never fall into a rhythm.
+func _hold_crowd() -> void:
+	_crowd_quiet = _rng.randf_range(CROWD_GAP_MIN, CROWD_GAP_MAX)
+
+
+func _play_crowd(key: String, loudness: float) -> void:
+	if _crowd == null or not is_instance_valid(_crowd):
+		return
+	_hold_crowd()
+
+	var stream := Audio.stream_for(key)
+	if stream == null:
+		return
+	_crowd.stream = stream
+	_crowd.volume_db = linear_to_db(maxf(0.0001, loudness * Settings.sfx_volume))
+	_crowd.play()
 
 
 func _leave() -> void:

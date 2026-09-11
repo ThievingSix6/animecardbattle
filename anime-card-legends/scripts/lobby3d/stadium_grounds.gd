@@ -20,12 +20,22 @@ extends Node3D
 
 # All measured in multiples of the city's half-width, so the approach
 # scales with the district and always clears the mountain ring.
-const CAUSEWAY_LENGTH := 1.9
+# The grounds moved further out and got wider when the stadium doubled:
+# at the old radius the building filled the whole apron and the forest
+# grew through its walls, and the near edge of the grounds reached back
+# inside the city.
+const CAUSEWAY_LENGTH := 2.6
 const CAUSEWAY_WIDTH := 0.18
-const GROUNDS_RADIUS := 0.62
+const GROUNDS_RADIUS := 0.95
 
-const STADIUM_WIDTH := 0.62
-const STADIUM_HEIGHT := 0.28
+# The stadium's long axis, in multiples of the city's half-width, and
+# then the straight 2x on top. One number to turn if it wants to be
+# bigger or smaller. The HEIGHT is not set here - it is whatever the
+# model's own proportions make it once the footprint is fitted.
+const STADIUM_SPAN := 0.62
+const STADIUM_SCALE := 2.0
+# Only used for the placeholder bowl, before stadium.glb lands.
+const SHELL_HEIGHT := 0.28
 
 const MARKER_RADIUS := 16.0
 
@@ -44,6 +54,12 @@ var city_half := 368.0
 var heading := Vector3.FORWARD
 
 var marker_position := Vector3.ZERO
+
+# What the stadium actually came out as, once the model was fitted. The
+# searchlights, the fireworks and the marker are all placed off the real
+# building rather than off the constants it was asked for.
+var _stadium_span := 0.0
+var _stadium_height := 0.0
 
 var _beams: Array[Node3D] = []
 var _rng := RandomNumberGenerator.new()
@@ -239,38 +255,47 @@ func _build_clusters(names: Array[String], placements: Array[Dictionary]) -> voi
 
 # --- The stadium ---------------------------------------------------------
 
+# Sized from its FOOTPRINT, not its height. stadium.glb carries one stray
+# mesh four times the height of the actual bowl, so asking for a height
+# sized the whole building against geometry that is not the building -
+# it came out a quarter of the size and floating clear of the ground.
 func _build_stadium(centre: Vector3) -> void:
-	var width := city_half * STADIUM_WIDTH
-	var height := city_half * STADIUM_HEIGHT
+	var span := city_half * STADIUM_SPAN * STADIUM_SCALE
 
 	var root := Node3D.new()
 	root.position = centre
 	root.rotation.y = atan2(-heading.x, -heading.z)
 	add_child(root)
 
+	var footprint := Vector3(span, city_half * SHELL_HEIGHT, span)
+
 	var model := Models.spawn_prop("stadium")
 	if model != null:
 		root.add_child(model)
-		Models.fit_upright(model, "stadium", height)
+		footprint = Models.fit_span(model, span)
 	else:
-		_build_stadium_shell(root, width, height)
+		_build_stadium_shell(root, span, footprint.y)
 
-	# Solid, so it cannot be driven through.
+	_stadium_span = maxf(footprint.x, footprint.z)
+	_stadium_height = footprint.y
+
+	# Solid, so it cannot be driven through. A box, because a stadium is
+	# half again as long as it is wide and a cylinder around it would put
+	# an invisible wall well outside the building.
 	var body := StaticBody3D.new()
 	root.add_child(body)
 	var shape := CollisionShape3D.new()
-	var collider := CylinderShape3D.new()
-	collider.radius = width * 0.5
-	collider.height = height
+	var collider := BoxShape3D.new()
+	collider.size = Vector3(maxf(footprint.x, 1.0), maxf(footprint.y, 1.0), maxf(footprint.z, 1.0))
 	shape.shape = collider
-	shape.position.y = height * 0.5
+	shape.position.y = footprint.y * 0.5
 	body.add_child(shape)
 
 	var plate := Label3D.new()
 	plate.text = "🚀  ROCKET ARENA"
 	plate.font_size = 128
 	plate.pixel_size = 0.03
-	plate.position.y = height * 1.25
+	plate.position.y = _stadium_height * 1.25
 	plate.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	plate.modulate = Color("#ff6b35")
 	plate.outline_size = 24
@@ -315,8 +340,8 @@ func _build_stadium_shell(root: Node3D, width: float, height: float) -> void:
 # additive geometry rather than SpotLights: a beam you can SEE is the
 # point, and eight real spotlights would cost far more than they show.
 func _build_beams(centre: Vector3) -> void:
-	var width := city_half * STADIUM_WIDTH
-	var height := city_half * STADIUM_HEIGHT
+	var width := _stadium_span
+	var height := _stadium_height
 	var length := height * BEAM_HEIGHT
 
 	var beam_mesh := CylinderMesh.new()
@@ -367,8 +392,8 @@ func _process(_delta: float) -> void:
 # explode rather than stream. Same reasoning as the car's boost trail:
 # these run on every renderer.
 func _build_fireworks(centre: Vector3) -> void:
-	var width := city_half * STADIUM_WIDTH
-	var height := city_half * STADIUM_HEIGHT
+	var width := _stadium_span
+	var height := _stadium_height
 
 	var colours: Array[Color] = [
 		Color("#ff6b35"), Color("#5ad1ff"), Color("#b04cff"), Color("#3ecf7e"),
@@ -421,7 +446,7 @@ func _build_fireworks(centre: Vector3) -> void:
 # A lit pad at the stadium's door. Walk or drive onto it and the match
 # loads.
 func _build_marker(centre: Vector3) -> void:
-	var width := city_half * STADIUM_WIDTH
+	var width := _stadium_span
 	marker_position = centre - heading * width * 0.75
 	marker_position.y = 0.0
 
