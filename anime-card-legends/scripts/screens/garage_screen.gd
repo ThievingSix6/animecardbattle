@@ -20,6 +20,9 @@ const CAMERA_BACK := 7.4
 const CAMERA_UP := 2.5
 
 var _chosen := ""
+var _passenger_label: Label
+var _passenger_row: HBoxContainer
+var _momentum: ProgressBar
 var _turntable: Node3D
 var _preview_host: SubViewport
 var _name_label: Label
@@ -64,6 +67,9 @@ func build_content() -> void:
 	content.add_child(arrows)
 
 	content.add_child(UI.separator())
+	content.add_child(_build_passenger())
+
+	content.add_child(UI.separator())
 	content.add_child(UI.section("EVERY CAR"))
 
 	_pick_row = UI.hbox(Design.S2)
@@ -75,6 +81,91 @@ func build_content() -> void:
 	content.add_child(strip)
 
 	_refresh()
+
+
+# --- The passenger -------------------------------------------------------
+#
+# One card rides with you. It gains Momentum, which the card game cannot
+# produce at any rate by any means - the only way a card gets any is to
+# have been in the car while someone drove.
+#
+# The seat is chosen here rather than in the collection because it is a
+# fact about the CAR. You are deciding who comes along.
+func _build_passenger() -> Control:
+	var panel := UI.vbox(Design.S2)
+	panel.add_child(UI.section("PASSENGER"))
+
+	var riding := Passenger.card()
+
+	_passenger_label = UI.label("", Design.FS_BODY, Design.TEXT)
+	_passenger_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	panel.add_child(_passenger_label)
+
+	_momentum = ProgressBar.new()
+	_momentum.max_value = Passenger.FULL
+	_momentum.show_percentage = false
+	_momentum.custom_minimum_size.y = 10
+	panel.add_child(_momentum)
+
+	panel.add_child(UI.wrapped_caption(
+		"Momentum comes from driving, goals and rings — and from nowhere else "
+		+ "in the game. It makes the card no stronger. A full card stops "
+		+ "gaining, so filling one means choosing another."))
+
+	var row := UI.hbox(Design.S2)
+	row.add_child(UI.button("Choose…", _open_picker))
+	if riding != null:
+		row.add_child(UI.button("Empty the seat", func():
+			Passenger.clear_seat()
+			_refresh_passenger()))
+	panel.add_child(row)
+
+	_passenger_row = row
+	_refresh_passenger()
+	return panel
+
+
+func _refresh_passenger() -> void:
+	if _passenger_label == null:
+		return
+	var riding := Passenger.card()
+	_passenger_label.text = Passenger.summary(riding)
+	_momentum.value = Passenger.carried(riding)
+	_momentum.modulate = Passenger.tint()
+
+
+# Every owned card, so the choice is the whole collection rather than the
+# battle team - a card you never field is exactly the sort of thing you
+# might send out to see the world.
+func _open_picker() -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Who is coming along?"
+	dialog.ok_button_text = "Close"
+
+	var page := UI.scroll()
+	page.custom_minimum_size = Vector2(520, 420)
+
+	var list := UI.vbox(Design.S1)
+	page.add_child(list)
+	dialog.add_child(page)
+
+	for card in GameState.collection.sorted("rarity"):
+		var here := card
+		var label := card.card_name
+		if Passenger.is_full(here):
+			label += "  ·  full"
+		elif Passenger.carried(here) > 0.0:
+			label += "  ·  " + Passenger.distance_text(Passenger.carried(here))
+
+		var pick := UI.button(label, func():
+			Passenger.seat(here.card_id)
+			_refresh_passenger()
+			dialog.queue_free())
+		pick.disabled = Passenger.is_seated(here.card_id)
+		list.add_child(pick)
+
+	add_child(dialog)
+	dialog.popup_centered()
 
 
 # --- The preview ---------------------------------------------------------

@@ -413,6 +413,9 @@ func _on_goal(entered: Node, scorer: String) -> void:
 		return
 	_score[scorer] = int(_score[scorer]) + 1
 	Audio.play("soccar_goal")
+	# Only the player's goals. The bot's card is not riding with anyone.
+	if scorer == "blue":
+		Passenger.add(Passenger.GOAL_BONUS)
 	_swell()
 	if hud != null:
 		hud.announce("%s SCORES" % scorer.to_upper())

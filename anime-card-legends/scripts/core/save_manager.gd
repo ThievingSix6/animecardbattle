@@ -139,6 +139,7 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"cards": cards,
 		"duplicates": collection.duplicates,
 		"team": collection.team_ids,
+		"passenger": collection.passenger_id,
 		"talents": progression.talents,
 		"highest_floor": progression.highest_floor,
 		"roll_packs": progression.roll_packs,
@@ -189,6 +190,7 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 	collection.owned.clear()
 	collection.duplicates.clear()
 	collection.team_ids.clear()
+	collection.passenger_id = ""
 
 	# v3 renamed owned_cards -> cards; accept both so older saves survive.
 	var card_list = parsed.get("cards", parsed.get("owned_cards", []))
@@ -202,6 +204,13 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 
 	for id in parsed.get("team", parsed.get("team_card_ids", [])):
 		collection.team_ids.append(str(id))
+
+	# A save written before the Passenger existed has no seat, and a
+	# seat holding a card that is no longer owned is emptied rather than
+	# left dangling.
+	collection.passenger_id = str(parsed.get("passenger", ""))
+	if not collection.owned.has(collection.passenger_id):
+		collection.passenger_id = ""
 
 	var talents = parsed.get("talents", parsed.get("talent_levels", {}))
 	for key in progression.talents.keys():

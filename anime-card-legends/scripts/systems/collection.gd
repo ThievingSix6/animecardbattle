@@ -12,6 +12,10 @@ var owned: Dictionary = {}        # card_id -> CardData
 var duplicates: Dictionary = {}   # card_id -> extra copies beyond the first
 var team_ids: Array[String] = []
 
+# Which card is riding in the car. A card, so it belongs to the save
+# rather than to Settings, where the chosen car MODEL lives.
+var passenger_id: String = ""
+
 
 func add(template: CardData, copies: int = 1) -> CardData:
 	if copies <= 0:
@@ -67,6 +71,14 @@ func unique_count() -> int:
 
 # Sells one copy: a duplicate if any exist, otherwise the last copy
 # (which also drops it from the team). Returns gold earned.
+# The seat cannot hold a card that is no longer owned. Called wherever a
+# card leaves the collection, so a sold passenger does not leave a ghost
+# in the car.
+func _vacate_if_gone(card_id: String) -> void:
+	if passenger_id == card_id and not owned.has(card_id):
+		passenger_id = ""
+
+
 func sell(card_id: String) -> int:
 	if not owned.has(card_id):
 		return 0
@@ -83,6 +95,7 @@ func sell(card_id: String) -> int:
 		owned.erase(card_id)
 		duplicates.erase(card_id)
 		team_ids.erase(card_id)
+		_vacate_if_gone(card_id)
 
 	EventBus.collection_changed.emit()
 	return value

@@ -297,6 +297,7 @@ func _on_ring_passed(index: int) -> void:
 	_running = true
 	_next_ring += 1
 	Audio.play_at("coin", 0.5, 1.0 + 0.02 * float(index))
+	Passenger.add(Passenger.RING_BONUS)
 
 	if _next_ring >= RING_COUNT:
 		_finish()
@@ -316,6 +317,7 @@ func _finish() -> void:
 	_running = false
 	_banner.text = "COURSE CLEAR  ·  %s  ·  %d resets" % [Fmt.clock(_clock), _deaths]
 	Audio.play("victory")
+	Passenger.add(Passenger.COURSE_BONUS)
 	# Worth something, so the mode is not only for its own sake.
 	GameState.add_gems(60)
 	GameState.add_gold(2500)

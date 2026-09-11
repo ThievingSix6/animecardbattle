@@ -86,9 +86,38 @@ func _populate() -> void:
 		body.add_child(UI.separator())
 		body.add_child(_build_level())
 		body.add_child(_build_grudges())
+		body.add_child(_build_passenger())
 		body.add_child(_build_record())
 
 	body.add_child(_build_actions())
+
+
+# Whether this card rides in the car, and how far it has come.
+#
+# Shown on the card rather than only in the garage because the mileage is
+# a fact about the CARD - it travels with it, it shows up in its record,
+# and one day something will ask for it.
+func _build_passenger() -> Control:
+	var owned: CardData = GameState.collection.owned.get(card.card_id, card)
+	var panel := UI.vbox(Design.S2)
+
+	var riding := Passenger.is_seated(owned.card_id)
+	var carried := Passenger.carried(owned)
+	if not riding and carried <= 0.0:
+		panel.visible = false
+		return panel
+
+	panel.add_child(UI.section("PASSENGER"))
+
+	var line := "Has ridden %s." % Passenger.distance_text(carried)
+	if Passenger.is_full(owned):
+		line = "Has ridden the full %s." % Passenger.distance_text(Passenger.FULL)
+	if riding:
+		line += " Currently in the car."
+	var text := UI.label(line, Design.FS_SMALL, Design.TEXT_DIM)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	panel.add_child(text)
+	return panel
 
 
 # GRUDGES GET NUMBERS, unlike the record.

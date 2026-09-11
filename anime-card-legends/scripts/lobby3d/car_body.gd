@@ -473,9 +473,15 @@ func _build_trails() -> void:
 		flame.scale_amount_max = CAR_LENGTH * 0.16
 		flame.gravity = Vector3.ZERO
 
+		# Burns in the PASSENGER'S colour. A Void card in the seat makes
+		# the car trail Void, a Celestial one is unmistakable from across
+		# the pitch, and an empty seat is the ordinary purple it always
+		# was. Cosmetic on purpose - carrying a card must never make the
+		# car faster, or the arcade mode stops being optional.
+		var burn := Passenger.tint()
 		var ramp := Gradient.new()
-		ramp.set_color(0, Color(0.75, 0.55, 1.0, 1.0))
-		ramp.set_color(1, Color(1.0, 0.3, 0.55, 0.0))
+		ramp.set_color(0, Color(burn.r, burn.g, burn.b, 1.0))
+		ramp.set_color(1, Color(burn.r * 1.2, burn.g * 0.5, burn.b * 0.7, 0.0))
 		flame.color_ramp = ramp
 
 		var mat := StandardMaterial3D.new()
@@ -584,6 +590,12 @@ func _physics_process(delta: float) -> void:
 		_flip_lock -= delta
 
 	_clamp_speed()
+
+	# The card in the seat is going somewhere. Only counted while the car
+	# is actually moving, so holding the throttle against a wall banks
+	# nothing.
+	if driver_seated and not ai_driven:
+		Passenger.travelled(speed(), delta)
 
 
 # --- Ground ---------------------------------------------------------
