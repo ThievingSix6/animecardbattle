@@ -180,14 +180,23 @@ func _width_capped(inner: Control) -> Control:
 	gutter.size_flags_vertical = inner.size_flags_vertical
 	gutter.add_child(inner)
 
-	# Recomputed on resize rather than pinned, so a narrow window still
-	# uses every pixel it has.
-	gutter.resized.connect(func():
-		var extra: int = maxi(0, int(gutter.size.x) - cap)
-		var side: int = extra / 2
+	# Measured from the WINDOW, never from the gutter's own size.
+	#
+	# Reading gutter.size.x inside gutter.resized is a feedback loop:
+	# margins raise a MarginContainer's minimum width, which grows its
+	# size, which fires resized again. That recursed until the stack
+	# overflowed, with the margin up past 64000px.
+	#
+	# The viewport's width does not depend on anything inside it, so
+	# this settles in one pass.
+	var apply := func():
+		var available: int = int(get_viewport_rect().size.x) - Design.S5 * 2
+		var side: int = maxi(0, available - cap) / 2
 		gutter.add_theme_constant_override("margin_left", side)
-		gutter.add_theme_constant_override("margin_right", side))
+		gutter.add_theme_constant_override("margin_right", side)
 
+	apply.call()
+	get_viewport().size_changed.connect(apply)
 	return gutter
 
 

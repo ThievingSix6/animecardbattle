@@ -71,7 +71,9 @@ const STOREFRONT_HEIGHT := 16.0
 const TOWER_WIDTH := 34.0
 const TOWER_HEIGHT := 62.0
 
-const PAD_RADIUS := 7.0
+# Sized against a 5.7 m player: a pad the player barely fits on is
+# a pad they walk past.
+const PAD_RADIUS := 13.0
 
 # Lights and signs are the expensive part of a city, not the geometry.
 # Both are spent near the middle, where the player actually is.
@@ -839,7 +841,7 @@ func _build_portal() -> void:
 func _build_car() -> void:
 	car = CarBody.create()
 	# Parked on the plaza's edge, clear of the portal and the shopfronts.
-	car.position = Vector3(14.0, 0.6, 24.0)
+	car.position = Vector3(26.0, CarBody.CAR_HEIGHT, 34.0)
 	car.rotation.y = PI
 	add_child(car)
 
@@ -852,7 +854,7 @@ func _build_car() -> void:
 		"name": "the car",
 		"route": "",
 		"pos": car.position,
-		"radius": 4.0,
+		"radius": CarBody.CAR_LENGTH * 1.3,
 		"pad": null,
 		"base_color": Color("#e8552c"),
 	})
@@ -1018,7 +1020,7 @@ func _talk_jokester() -> void:
 
 func _build_player() -> void:
 	player = LobbyPlayer.new()
-	player.position = Vector3(0, 1.2, 22)
+	player.position = Vector3(0, 3.5, 26)
 	add_child(player)
 
 

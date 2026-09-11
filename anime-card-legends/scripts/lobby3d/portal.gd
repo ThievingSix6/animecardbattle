@@ -14,8 +14,8 @@ extends Node3D
 # lands.
 # =========================================================
 
-const RADIUS := 4.5
-const MODEL_HEIGHT := 5.2
+const RADIUS := 13.0
+const MODEL_HEIGHT := 13.0
 
 var tint := Color("#5ad1ff")
 

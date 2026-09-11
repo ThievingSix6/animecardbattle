@@ -32,54 +32,66 @@ extends RigidBody3D
 # =========================================================
 
 # --- Shell ---------------------------------------------------------
-const CAR_LENGTH := 2.7
-const CAR_WIDTH := 1.5
-const CAR_HEIGHT := 0.75
-const CAR_MASS := 180.0
-# Heavier than real gravity: arcs stay snappy instead of floaty.
-const GRAVITY_SCALE := 1.5
+#
+# The world is built around a 5.7 m player, so the car is scaled to
+# match. Everything below derives from CAR_SCALE: change that one
+# number and the shell, the suspension, the speeds and the forces all
+# move together. Tuning them independently is how a car ends up
+# handling like it is made of polystyrene.
+const CAR_SCALE := 3.5
 
-# Set to PI if the model faces +Z and drives backwards.
-const MODEL_YAW := 0.0
+const CAR_LENGTH := 2.7 * CAR_SCALE
+const CAR_WIDTH := 1.5 * CAR_SCALE
+const CAR_HEIGHT := 0.75 * CAR_SCALE
+const CAR_MASS := 180.0
+# Heavier than real gravity: arcs stay snappy instead of floaty. Scaled
+# up too, or a big car hangs in the air like a balloon.
+const GRAVITY_SCALE := 1.5 * CAR_SCALE
+
+# The supplied model faces +Z, so it is turned to face Godot's forward.
+const MODEL_YAW := PI
 
 # --- Suspension ----------------------------------------------------
-const REST_LENGTH := 0.55
-const SPRING := 9000.0
-const DAMPING := 900.0
+const REST_LENGTH := 0.55 * CAR_SCALE
+const SPRING := 9000.0 * CAR_SCALE
+const DAMPING := 900.0 * CAR_SCALE
 
 # --- Driving -------------------------------------------------------
-const DRIVE_FORCE := 5200.0
-const REVERSE_FORCE := 3000.0
-const MAX_SPEED := 24.0
-const BOOST_MAX_SPEED := 34.0
-const BRAKE_FORCE := 6000.0
+const DRIVE_FORCE := 5200.0 * CAR_SCALE
+const REVERSE_FORCE := 3000.0 * CAR_SCALE
+const MAX_SPEED := 24.0 * CAR_SCALE
+const BOOST_MAX_SPEED := 34.0 * CAR_SCALE
+const BRAKE_FORCE := 6000.0 * CAR_SCALE
 
-const STEER_TORQUE := 9000.0
-const GRIP := 5200.0
-const DRIFT_GRIP := 1100.0
+const STEER_TORQUE := 9000.0 * CAR_SCALE
+const GRIP := 5200.0 * CAR_SCALE
+const DRIFT_GRIP := 1100.0 * CAR_SCALE
 # Steering falls off with speed, so it is not twitchy flat out.
-const STEER_SPEED_FALLOFF := 26.0
+const STEER_SPEED_FALLOFF := 26.0 * CAR_SCALE
 
 const ROLLING_DRAG := 0.6
 
 # --- Air -----------------------------------------------------------
-const AIR_PITCH_TORQUE := 5200.0
-const AIR_YAW_TORQUE := 4200.0
-const AIR_ROLL_TORQUE := 6200.0
+# Torques scale with the square of size: a car 3.5x longer has far more
+# rotational inertia, and linear scaling would leave it turning like a
+# barge.
+const AIR_PITCH_TORQUE := 5200.0 * CAR_SCALE * CAR_SCALE
+const AIR_YAW_TORQUE := 4200.0 * CAR_SCALE * CAR_SCALE
+const AIR_ROLL_TORQUE := 6200.0 * CAR_SCALE * CAR_SCALE
 const AIR_DAMPING := 0.06
 
 # --- Jumps and flips -----------------------------------------------
-const JUMP_IMPULSE := 6.2
-const SECOND_JUMP_IMPULSE := 5.4
+const JUMP_IMPULSE := 6.2 * CAR_SCALE
+const SECOND_JUMP_IMPULSE := 5.4 * CAR_SCALE
 # How long after leaving the ground a second press still counts.
 const FLIP_WINDOW := 1.45
-const FLIP_IMPULSE := 9.5
+const FLIP_IMPULSE := 9.5 * CAR_SCALE
 const FLIP_TORQUE := 34.0
 # A flip locks rotation control briefly, the way it does in RL.
 const FLIP_LOCK := 0.65
 
 # --- Boost ---------------------------------------------------------
-const BOOST_FORCE := 9000.0
+const BOOST_FORCE := 9000.0 * CAR_SCALE
 const BOOST_MAX := 100.0
 const BOOST_DRAIN := 33.0
 const BOOST_REGEN := 8.0
@@ -215,10 +227,10 @@ func _build_trails() -> void:
 		flame.local_coords = false
 		flame.direction = Vector3(0.0, 0.0, 1.0)
 		flame.spread = 8.0
-		flame.initial_velocity_min = 6.0
-		flame.initial_velocity_max = 11.0
-		flame.scale_amount_min = 0.28
-		flame.scale_amount_max = 0.5
+		flame.initial_velocity_min = 6.0 * CAR_SCALE
+		flame.initial_velocity_max = 11.0 * CAR_SCALE
+		flame.scale_amount_min = 0.28 * CAR_SCALE
+		flame.scale_amount_max = 0.5 * CAR_SCALE
 		flame.gravity = Vector3.ZERO
 
 		var ramp := Gradient.new()
@@ -235,7 +247,7 @@ func _build_trails() -> void:
 		flame.material_override = mat
 
 		var quad := QuadMesh.new()
-		quad.size = Vector2(0.4, 0.4)
+		quad.size = Vector2(0.4, 0.4) * CAR_SCALE
 		flame.mesh = quad
 
 		add_child(flame)

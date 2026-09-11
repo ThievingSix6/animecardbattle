@@ -14,12 +14,12 @@ extends Node3D
 # writing works before the art does.
 # =========================================================
 
-const PROMPT_RADIUS := 4.0
+const PROMPT_RADIUS := 10.0
 
 # Wandering.
-const WALK_SPEED := 3.4
+const WALK_SPEED := 9.0
 const TURN_SPEED := 7.0
-const ARRIVE_DISTANCE := 1.6
+const ARRIVE_DISTANCE := 4.0
 const PAUSE_MIN := 2.0
 const PAUSE_MAX := 6.5
 

@@ -10,14 +10,17 @@ extends CharacterBody3D
 # the cursor.
 # =========================================================
 
-const SPEED := 9.5
+# Derived from BODY_HEIGHT rather than fixed, so changing the character's
+# scale moves the camera and the walk speed with it - a 5.7 m character
+# moving at a 1.9 m character's speed reads as slow motion.
+const SPEED := BODY_HEIGHT * 1.7
 const SPRINT_MULT := 2.6
 # Developer mode gets a serious boost, because crossing a square
 # kilometre to check one building otherwise takes two minutes.
 const DEV_SPRINT_MULT := 7.0
 const ACCEL := 12.0
-const JUMP_VELOCITY := 5.2
-const GRAVITY := 18.0
+const JUMP_VELOCITY := BODY_HEIGHT * 1.5
+const GRAVITY := BODY_HEIGHT * 5.5
 const TURN_SPEED := 11.0
 
 const MOUSE_SENS := 0.0032
@@ -25,13 +28,13 @@ const MOUSE_SENS := 0.0032
 const STICK_SENS := 2.6
 const PITCH_MIN := -0.9
 const PITCH_MAX := 0.45
-const CAM_DISTANCE := 9.0
-const CAM_HEIGHT := 3.2
+const CAM_DISTANCE := BODY_HEIGHT * 2.4
+const CAM_HEIGHT := BODY_HEIGHT * 0.9
 
 # How tall the character stands, imported or not. The capsule collider
 # is built to this, and an imported model is rescaled to match it, so a
 # model exported at any scale walks the world correctly.
-const BODY_HEIGHT := 1.9
+const BODY_HEIGHT := 5.7
 
 # Godot's forward is -Z. Set this to PI if the imported character faces
 # the camera while running away.
@@ -62,7 +65,7 @@ func _ready() -> void:
 func _build_collision() -> void:
 	var shape := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.5
+	capsule.radius = BODY_HEIGHT * 0.26
 	capsule.height = BODY_HEIGHT
 	shape.shape = capsule
 	shape.position.y = BODY_HEIGHT * 0.5
@@ -79,7 +82,7 @@ func _build_body() -> void:
 
 	var torso := MeshInstance3D.new()
 	var capsule := CapsuleMesh.new()
-	capsule.radius = 0.45
+	capsule.radius = BODY_HEIGHT * 0.24
 	capsule.height = BODY_HEIGHT * 0.9
 	torso.mesh = capsule
 	torso.position.y = BODY_HEIGHT * 0.5
@@ -167,7 +170,7 @@ func _update_animation(moving: bool) -> void:
 
 func _build_camera() -> void:
 	_pivot = Node3D.new()
-	_pivot.position.y = 1.4
+	_pivot.position.y = BODY_HEIGHT * 0.72
 	add_child(_pivot)
 
 	_camera = Camera3D.new()

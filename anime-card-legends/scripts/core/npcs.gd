@@ -34,7 +34,8 @@ const DEFINITIONS: Array[Dictionary] = [
 		"name": "The Boy",
 		"title": "undefeated",
 		"tint": Color("#f5a623"),
-		"height": 1.2,
+		# Double his original 1.6, to stand alongside a 5.7 m player.
+		"height": 3.2,
 		"wanders": true,
 	},
 	{
@@ -42,7 +43,8 @@ const DEFINITIONS: Array[Dictionary] = [
 		"name": "The Jokester",
 		"title": "reliable source",
 		"tint": Color("#a855f7"),
-		"height": 1.35,
+		# Double her original 1.8.
+		"height": 3.6,
 		"wanders": false,
 	},
 ]

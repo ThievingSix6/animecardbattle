@@ -28,7 +28,7 @@ const GROUND_RADIUS := 46.0
 const PATH_RADIUS := 13.0
 const PATH_START_Z := -8.0
 const PATH_LENGTH := 30.0
-const PAD_RADIUS := 5.0
+const PAD_RADIUS := 11.0
 
 var zone: Dictionary = {}
 var zone_index := 0
@@ -595,7 +595,7 @@ func _build_portal() -> void:
 
 func _build_player() -> void:
 	player = LobbyPlayer.new()
-	player.position = Vector3(0, 1.2, 8)
+	player.position = Vector3(0, 3.5, 16)
 	add_child(player)
 
 
