@@ -85,9 +85,36 @@ func _populate() -> void:
 	if GameState.collection.has(card.card_id):
 		body.add_child(UI.separator())
 		body.add_child(_build_level())
+		body.add_child(_build_grudges())
 		body.add_child(_build_record())
 
 	body.add_child(_build_actions())
+
+
+# GRUDGES GET NUMBERS, unlike the record.
+#
+# The record is prose on purpose - it has no mechanical weight and
+# showing it as a stat block would invite farming it. A grudge is the
+# opposite: it changes the card's attack and defense, and a mechanical
+# effect a player cannot see is a bug. So this block is blunt about
+# exactly what it does and to whom.
+func _build_grudges() -> Control:
+	var owned: CardData = GameState.collection.owned.get(card.card_id, card)
+	var panel := UI.vbox(Design.S2)
+	if not Grudges.has_any(owned):
+		panel.visible = false
+		return panel
+
+	panel.add_child(UI.section("GRUDGES"))
+	for line in Grudges.lines(owned):
+		var row := UI.label(line, Design.FS_SMALL, Design.ACCENT)
+		row.autowrap_mode = TextServer.AUTOWRAP_WORD
+		panel.add_child(row)
+
+	var note := UI.caption("Earned by falling in a fight this card lost. They cannot be removed.")
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD
+	panel.add_child(note)
+	return panel
 
 
 # THE CARD'S BACK.

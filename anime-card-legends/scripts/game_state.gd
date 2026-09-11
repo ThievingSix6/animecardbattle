@@ -354,10 +354,17 @@ func unequip_slot(slot: String) -> void:
 
 
 # The team as it fights: stored cards with equipment bonuses layered on.
-func get_battle_team() -> Array[CardData]:
+# The team as it goes into ONE PARTICULAR FIGHT. `against` is the name of
+# the boss on the other side, or "" for a fight with nobody in particular
+# in it, and it is what lets a card's grudges matter.
+#
+# One readable chain: the stored card, plus what it is wearing, plus who
+# it is about to face. Each step returns a copy, so the card in the
+# collection is never touched.
+func get_battle_team(against: String = "") -> Array[CardData]:
 	var team: Array[CardData] = []
 	for card in collection.get_team():
-		team.append(equipment.apply_to(card))
+		team.append(Grudges.apply_to(equipment.apply_to(card), against))
 	return team
 
 

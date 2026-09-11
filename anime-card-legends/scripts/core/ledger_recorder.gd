@@ -142,6 +142,12 @@ func _on_ended(player_won: bool) -> void:
 
 		if _fell.has(id):
 			Ledger.bump(card, Ledger.FELLED)
+			# A grudge forms only where all three line up: a boss with a
+			# name, this card down, and the fight lost. Falling in a
+			# fight you go on to WIN is not a grudge - it is a scratch.
+			if not player_won and boss_name != "":
+				if Grudges.take(card, boss_name):
+					EventBus.toast("%s will remember %s." % [card.card_name, boss_name], "error")
 		else:
 			Ledger.bump(card, Ledger.SURVIVED)
 

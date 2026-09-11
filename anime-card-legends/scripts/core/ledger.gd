@@ -52,13 +52,16 @@ const FIRST_SEEN := "first_seen"    # unix seconds, when it was obtained
 const LAST_FIELDED := "last_fielded" # unix seconds, last fight it was in
 const MOMENTUM := "momentum"        # metres carried as a Passenger (the arena)
 const SPARED := "spared"            # times the sell screen was opened and backed out of
+const GRUDGES := "grudges"          # boss name -> how deep the grudge runs
 
 # Every integer key, for repair() and for a clean empty record.
 const COUNTERS: Array[String] = [
 	BATTLES, WINS, LOSSES, SURVIVED, FELLED, KILLS, DEEPEST,
 	FIRST_SEEN, LAST_FIELDED, SPARED,
 ]
-const TALLIES: Array[String] = [ZONES, WEATHER]
+# Every {name -> count} map. Grudges live here because that is exactly
+# their shape, which means they save, load and repair for free.
+const TALLIES: Array[String] = [ZONES, WEATHER, GRUDGES]
 
 
 # A blank record. `now` is passed in rather than read here so a batch of
@@ -200,6 +203,11 @@ static func record_lines(card: CardData) -> Array[String]:
 			lines.append("Has never been fielded. %s in the vault." % _days(held))
 		else:
 			lines.append("Has never been fielded.")
+		# Falls through rather than returning: a card can hold a grudge
+		# and have no battles behind it - one taken, then the fight
+		# reset, or a card handed a history by something other than
+		# combat. Who it hates is part of its story either way.
+		_append_grudges(record, lines)
 		return lines
 
 	var won := int(record.get(WINS, 0))
@@ -243,7 +251,22 @@ static func record_lines(card: CardData) -> Array[String]:
 	if spared > 0:
 		lines.append("Nearly sold %s." % _plural(spared, "time"))
 
+	_append_grudges(record, lines)
 	return lines
+
+
+# Named, not counted. WHO it hates belongs in the story of the card; what
+# the hatred is worth belongs in the grudges panel, with numbers.
+static func _append_grudges(record: Dictionary, lines: Array[String]) -> void:
+	var held: Array[String] = []
+	var grudges: Variant = record.get(GRUDGES, {})
+	if grudges is Dictionary:
+		for boss_name in grudges:
+			held.append(str(boss_name))
+	if held.is_empty():
+		return
+	held.sort()
+	lines.append("Has not forgotten %s." % _list(held))
 
 
 # --- Save round trip ----------------------------------------------------

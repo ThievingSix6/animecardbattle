@@ -132,7 +132,12 @@ func _start() -> void:
 			opposition = EnemyFactory.build_boy_deck()
 		_:
 			opposition = EnemyFactory.build_floor(floor_number, GameState.progression)
-	sim.setup(GameState.get_battle_team(), opposition)
+	# The team is assembled AGAINST someone. A card that holds a grudge
+	# against the thing on the other side comes in sharpened; one that
+	# holds grudges against anything else comes in slightly blunted.
+	var context := _ledger_context()
+	sim.setup(GameState.get_battle_team(str(context["boss"])), opposition)
+	_announce_grudges(str(context["boss"]))
 
 	if mode == "gauntlet":
 		_apply_carried_wounds()
@@ -155,13 +160,27 @@ func _start() -> void:
 	# record. Held in a var because the recorder is a RefCounted holding
 	# the only strong reference to itself - drop it and the connections
 	# go with it halfway through the battle.
-	_recorder = LedgerRecorder.watch(sim, _ledger_context())
+	_recorder = LedgerRecorder.watch(sim, context)
 
 	_write("[center][color=#%s]%s — BEGIN[/color][/center]" % [
 		Design.ACCENT.to_html(false), screen_title().to_upper()])
 
 	await get_tree().create_timer(0.7).timeout
 	_run()
+
+
+# The payoff moment. A grudge that fires silently is a stat change; a
+# grudge the log calls out by name is the card having a history with the
+# thing across the board from it.
+func _announce_grudges(boss_name: String) -> void:
+	if boss_name == "":
+		return
+	for card in GameState.collection.get_team():
+		var level := Grudges.depth(card, boss_name)
+		if level <= 0:
+			continue
+		_write("[color=#%s]%s remembers %s.[/color]" % [
+			Design.ACCENT.to_html(false), card.card_name, boss_name])
 
 
 # What the record needs to know about this fight that the sim does not:
@@ -190,12 +209,12 @@ func _ledger_context() -> Dictionary:
 		_:
 			context["floor"] = floor_number
 			context["zone"] = Campaign.zone_name_for_floor(floor_number)
-			# Only boss stages get a name. An ordinary floor is somewhere
-			# a card has been, not something it has beaten.
+			# Only boss stages get a name, and it is the boss's REAL
+			# name - Cinder Tyrant, not "Boss of Emberfall". A grudge is
+			# held against a thing, and a thing has a name.
 			var stage := Campaign.stage_index_for_floor(floor_number)
 			if Campaign.is_boss_stage(stage):
-				context["boss"] = "%s of %s" % [
-					Campaign.stage_label(floor_number), context["zone"]]
+				context["boss"] = str(Campaign.zone_for_floor(floor_number).get("boss", ""))
 
 	return context
 
