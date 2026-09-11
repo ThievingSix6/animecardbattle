@@ -119,7 +119,7 @@ func craft(collection: CollectionSystem, item_id: String) -> bool:
 		if remaining <= 0:
 			break
 		var spare: int = collection.duplicate_count(id)
-		var take: int = min(spare, remaining)
+		var take: int = mini(spare, remaining)
 		if take <= 0:
 			continue
 		collection.duplicates[id] = spare - take

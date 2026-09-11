@@ -138,7 +138,7 @@ static func turn_start(skill_id: String, c: SkillCtx) -> void:
 					burning += 1
 			c.unit.clear_buffs_with_key("kindled")
 			if burning > 0:
-				c.unit.add_buff("energyRate", min(0.12, float(burning) * 0.04), 2, "kindled", 1)
+				c.unit.add_buff("energyRate", minf(0.12, float(burning) * 0.04), 2, "kindled", 1)
 
 		"inferno_pulse":
 			if c.unit.bump("pulse") % Skills.turns(10.0) == 0:
@@ -256,7 +256,7 @@ static func turn_start(skill_id: String, c: SkillCtx) -> void:
 
 		"soul_burn":
 			if c.unit.bump("soulburn_t") % Skills.turns(8.0) == 0:
-				c.unit.hp = max(1, c.unit.hp - c.pct_max(c.unit, 0.01))
+				c.unit.hp = maxi(1, c.unit.hp - c.pct_max(c.unit, 0.01))
 
 		"doomsday_clock":
 			var ticks := c.unit.bump("doom")
@@ -299,7 +299,7 @@ static func outgoing(skill_id: String, c: SkillCtx) -> void:
 				c.unit.counters["rush_target"] = c.target.id()
 				var stacks := 0
 				if same:
-					stacks = min(4, c.unit.bump("rush"))
+					stacks = mini(4, c.unit.bump("rush"))
 				else:
 					c.unit.counters["rush"] = 0
 				c.damage = int(round(float(c.damage) * (1.0 + float(stacks) * 0.05)))
@@ -312,7 +312,7 @@ static func outgoing(skill_id: String, c: SkillCtx) -> void:
 			if c.chance(0.12):
 				c.damage = int(round(float(c.damage) * 1.5))
 				if c.target != null:
-					c.target.stun_turns = max(c.target.stun_turns, 1)
+					c.target.stun_turns = maxi(c.target.stun_turns, 1)
 				c.sim.note(c.unit, "%s lands a crushing blow" % c.unit.data.card_name)
 
 		"predator":
@@ -327,7 +327,7 @@ static func outgoing(skill_id: String, c: SkillCtx) -> void:
 		"overcharge":
 			if c.unit.bump("overcharge") % 8 == 0:
 				c.damage = int(round(float(c.damage) * 2.0))
-				c.unit.hp = max(1, c.unit.hp - c.pct_max(c.unit, 0.03))
+				c.unit.hp = maxi(1, c.unit.hp - c.pct_max(c.unit, 0.03))
 				c.sim.note(c.unit, "%s overcharges" % c.unit.data.card_name)
 
 		"bloodied_blade":
@@ -348,7 +348,7 @@ static func outgoing(skill_id: String, c: SkillCtx) -> void:
 		"blood_price":
 			if c.unit.bump("bloodprice") % 6 == 0:
 				c.damage = int(round(float(c.damage) * 1.5))
-				c.unit.hp = max(1, c.unit.hp - c.pct_max(c.unit, 0.02))
+				c.unit.hp = maxi(1, c.unit.hp - c.pct_max(c.unit, 0.02))
 
 		"blood_debt":
 			var owed := c.unit.count("debt")
@@ -435,7 +435,7 @@ static func dealt(skill_id: String, c: SkillCtx) -> void:
 
 		"silencer":
 			if c.target != null and c.unit.bump("silencer") % 5 == 0 and c.chance(0.25):
-				c.target.silence_turns = max(c.target.silence_turns, 1)
+				c.target.silence_turns = maxi(c.target.silence_turns, 1)
 				c.sim.note(c.unit, "%s is silenced" % c.target.data.card_name)
 
 		"echo_blade":
@@ -488,7 +488,7 @@ static func taken(skill_id: String, c: SkillCtx) -> void:
 				c.attacker.apply_dot("burn", Skills.turns(4.0), int(round(float(c.unit.attack_power()) * 0.03)))
 
 		"mana_leech":
-			c.unit.energy = min(Config.ENERGY_MAX, c.unit.energy + 5)
+			c.unit.energy = mini(Config.ENERGY_MAX, c.unit.energy + 5)
 
 		"rage_engine":
 			var lost := int(floor((1.0 - c.unit.hp_ratio()) * 10.0))
@@ -507,7 +507,7 @@ static func taken(skill_id: String, c: SkillCtx) -> void:
 				if c.unit.marked.is_empty():
 					c.unit.marked[c.attacker.id()] = true
 				elif c.unit.marked.has(c.attacker.id()):
-					c.sim.direct_damage(c.unit, c.attacker, max(1, int(round(float(c.attacker.attack_power()) * 0.03))), "Echo of Pain")
+					c.sim.direct_damage(c.unit, c.attacker, maxi(1, int(round(float(c.attacker.attack_power()) * 0.03))), "Echo of Pain")
 
 		"rallying_cry":
 			if c.unit.hp_ratio() < 0.5 and c.unit.claim("rally"):
@@ -530,7 +530,7 @@ static func lethal(skill_id: String, c: SkillCtx) -> void:
 		"death_denied":
 			if c.unit.claim("death_denied"):
 				c.prevented = true
-				c.unit.hp = max(1, c.pct_max(c.unit, 0.05))
+				c.unit.hp = maxi(1, c.pct_max(c.unit, 0.05))
 				c.sim.note(c.unit, "%s denies death" % c.unit.data.card_name)
 
 

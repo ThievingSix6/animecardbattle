@@ -158,7 +158,7 @@ func _build_identity() -> Control:
 		var next_tier := Config.next_rarity(card.rarity)
 		var text := "Owned: " + Fmt.commas(owned)
 		if next_tier != "":
-			text += "   ·   " + Fmt.commas(min(owned, Config.MERGE_REQUIREMENT)) + "/" + str(Config.MERGE_REQUIREMENT) + " to merge into " + next_tier
+			text += "   ·   " + Fmt.commas(mini(owned, Config.MERGE_REQUIREMENT)) + "/" + str(Config.MERGE_REQUIREMENT) + " to merge into " + next_tier
 		column.add_child(UI.caption(text))
 
 	return column

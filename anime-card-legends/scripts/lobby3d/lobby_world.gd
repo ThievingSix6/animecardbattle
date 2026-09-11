@@ -1028,7 +1028,9 @@ func _build_scatter() -> void:
 
 # Nudges a coordinate to just off the nearest street centre line.
 func _kerb(value: float) -> float:
-	var line := (round(value / BLOCK_PITCH + 0.5) - 0.5) * BLOCK_PITCH
+	# roundf, not round: round() returns Variant, which cannot be
+	# inferred from and poisons the whole expression.
+	var line := (roundf(value / BLOCK_PITCH + 0.5) - 0.5) * BLOCK_PITCH
 	var side := 1.0
 	if value < line:
 		side = -1.0

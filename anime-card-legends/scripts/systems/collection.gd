@@ -158,7 +158,7 @@ func get_team() -> Array[CardData]:
 	# Fall back to the first few owned cards so battle is never empty.
 	if team.is_empty():
 		var all := get_all()
-		for i in min(TEAM_SIZE, all.size()):
+		for i in mini(TEAM_SIZE, all.size()):
 			team.append(all[i])
 
 	return team

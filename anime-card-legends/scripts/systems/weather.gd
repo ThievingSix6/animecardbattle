@@ -72,7 +72,7 @@ func is_active() -> bool:
 func seconds_remaining() -> float:
 	if not is_active():
 		return 0.0
-	return max(0.0, ends_at - Time.get_unix_time_from_system())
+	return maxf(0.0, ends_at - Time.get_unix_time_from_system())
 
 
 func boosted_element() -> String:

@@ -198,7 +198,7 @@ func _capture_mouse(capture: bool) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and _mouse_captured:
 		_yaw -= event.relative.x * MOUSE_SENS
-		_pitch = clamp(_pitch - event.relative.y * MOUSE_SENS, PITCH_MIN, PITCH_MAX)
+		_pitch = clampf(_pitch - event.relative.y * MOUSE_SENS, PITCH_MIN, PITCH_MAX)
 
 	elif event is InputEventMouseButton and not _mouse_captured:
 		if event.pressed:

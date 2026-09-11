@@ -129,7 +129,7 @@ func apply_upgrade(talent: String) -> void:
 
 
 func roll_interval() -> float:
-	return max(
+	return maxf(
 		Config.ROLL_INTERVAL_MIN,
 		Config.ROLL_INTERVAL_BASE - float(talents["speed"]) * Config.ROLL_INTERVAL_PER_LEVEL
 	)

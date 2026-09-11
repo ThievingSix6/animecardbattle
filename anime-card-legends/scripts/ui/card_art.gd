@@ -89,7 +89,7 @@ static func _resolve(card: CardData) -> Texture2D:
 
 	# 3. Otherwise assign deterministically from the pool.
 	if not _files.is_empty():
-		var index: int = abs(hash(card.card_id)) % _files.size()
+		var index: int = absi(hash(card.card_id)) % _files.size()
 		return load(_files[index])
 
 	# 4. No art supplied: the card frame renders on its own.

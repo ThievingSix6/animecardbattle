@@ -32,6 +32,33 @@ def add(f, line_no, kind, text):
     issues.append((f, line_no, kind, text.strip()[:90]))
 
 
+# Removes `float(...)`, `int(...)` and friends along with everything they
+# wrap, so a Variant call that has already been converted is not
+# reported. Paren-aware, because these nest.
+def strip_casts(expr):
+    wrappers = ("float(", "int(", "str(", "bool(", "hash(", "len(")
+    changed = True
+    while changed:
+        changed = False
+        for w in wrappers:
+            start = expr.find(w)
+            if start < 0:
+                continue
+            depth = 0
+            for j in range(start + len(w) - 1, len(expr)):
+                if expr[j] == "(":
+                    depth += 1
+                elif expr[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        expr = expr[:start] + expr[j + 1:]
+                        changed = True
+                        break
+            if changed:
+                break
+    return expr
+
+
 for path in sorted((ROOT / "scripts").rglob("*.gd")):
     src = path.read_text(encoding="utf-8")
     lines = src.split("\n")
@@ -76,12 +103,19 @@ for path in sorted((ROOT / "scripts").rglob("*.gd")):
             # mistake this rule exists to catch -- they are NOT casts.
             CASTS = ("float(", "int(", "str(", "bool(", "Color(", "Vector2(",
                      "Vector3(", "StringName(", "NodePath(", "hash(", "len(")
-            VARIANT_FUNCS = ("min(", "max(", "clamp(", "abs(", "sign(",
-                             "snapped(", "wrap(", "lerp(", "posmod(")
-            if rhs.startswith(VARIANT_FUNCS):
-                add(rel, i, "VARIANT-INFER", line)
-                continue
+            # Every built-in that returns Variant. round/floor/ceil were
+            # missing, which is how `(round(x) - 0.5) * y` got through.
+            VARIANT_FUNCS = ("min", "max", "clamp", "abs", "sign", "round",
+                             "floor", "ceil", "snapped", "wrap", "lerp",
+                             "posmod", "pow", "sqrt")
             if rhs.startswith(CASTS):
+                continue
+            # Anywhere in the expression, not just at the front: the
+            # result of `round(...)` is Variant however deeply it is
+            # nested, and that poisons the whole inference.
+            bare = strip_casts(rhs)
+            if re.search(r"\b(" + "|".join(VARIANT_FUNCS) + r")\s*\(", bare):
+                add(rel, i, "VARIANT-INFER", line)
                 continue
             if re.search(r"\.get\(|\w+\[\"", rhs):
                 add(rel, i, "VARIANT-INFER", line)

@@ -64,4 +64,4 @@ static func _pct(value: float) -> String:
 # Stable "dex number" derived from the card id, so the same card always
 # shows the same number without needing to be stored in the save file.
 static func dex_number(card: CardData) -> int:
-	return (abs(hash(card.card_id)) % 999) + 1
+	return (absi(hash(card.card_id)) % 999) + 1

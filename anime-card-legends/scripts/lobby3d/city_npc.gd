@@ -244,4 +244,4 @@ func _pick_target() -> void:
 
 # Street centre lines sit at (n - 0.5) * pitch, between the blocks.
 func _nearest_street(value: float) -> float:
-	return (round(value / street_pitch + 0.5) - 0.5) * street_pitch
+	return (roundf(value / street_pitch + 0.5) - 0.5) * street_pitch

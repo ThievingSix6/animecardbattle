@@ -110,7 +110,7 @@ func _process(delta: float) -> void:
 	var behind := _target.global_position + facing.normalized() * FOLLOW_DISTANCE
 	behind.y = HOVER_HEIGHT + sin(_time * BOB_SPEED) * BOB_AMPLITUDE
 
-	global_position = global_position.lerp(behind, clamp(FOLLOW_SMOOTH * delta, 0.0, 1.0))
+	global_position = global_position.lerp(behind, clampf(FOLLOW_SMOOTH * delta, 0.0, 1.0))
 
 	if _glow:
 		_glow.light_energy = 1.2 + sin(_time * 2.0) * 0.3
