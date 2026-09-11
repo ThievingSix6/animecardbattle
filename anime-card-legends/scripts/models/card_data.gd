@@ -65,3 +65,10 @@ extends Resource
 @export_category("Collection")
 @export var obtained: bool = false
 @export var locked: bool = false
+
+@export_category("Record")
+# What this card has lived through. See scripts/core/ledger.gd - it is a
+# private history rather than a stat, it makes the card no stronger on
+# its own, and other systems read it to ask questions no amount of gold
+# can answer. Empty until the first thing happens to the card.
+@export var ledger: Dictionary = {}

@@ -91,6 +91,7 @@ const CARD_FIELDS: Array[String] = [
 	"crit_chance", "crit_damage", "basic_ability", "ultimate_ability",
 	"basic_target_mode", "ultimate_target_mode", "skill_id",
 	"stars", "max_stars", "experience", "sell_value", "upgrade_cost", "obtained", "locked",
+	"ledger",
 ]
 
 
@@ -112,6 +113,14 @@ static func dict_to_card(d: Dictionary) -> CardData:
 	# older card levels and filters exactly like a freshly pulled one.
 	if card.banner_id == "":
 		card.banner_id = Banners.banner_for(card.element, card.role)
+
+	# JSON has one number type, so every count in a saved record comes
+	# back as a float: 214 goes out and 214.0 comes in. Harmless until
+	# something increments it, writes 215.0, and then fails a type check
+	# a hundred hours into someone's save. Repaired here, once, rather
+	# than defended against at every read site.
+	card.ledger = Ledger.repair(card.ledger)
+
 	Leveling.apply(card)
 	return card
 

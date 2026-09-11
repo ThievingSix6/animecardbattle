@@ -8,6 +8,9 @@ extends Screen
 var sim: BattleSim
 var floor_number := 1
 
+# Kept alive for the length of the fight; see _start().
+var _recorder: LedgerRecorder
+
 # What this fight is: "floor", "raid", "gauntlet" or "duel".
 var mode := "floor"
 var wave := 0
@@ -148,11 +151,53 @@ func _start() -> void:
 	sim.actives_changed.connect(_on_actives_changed)
 	sim.battle_ended.connect(_on_ended)
 
+	# Every card in this fight writes what happened to it into its own
+	# record. Held in a var because the recorder is a RefCounted holding
+	# the only strong reference to itself - drop it and the connections
+	# go with it halfway through the battle.
+	_recorder = LedgerRecorder.watch(sim, _ledger_context())
+
 	_write("[center][color=#%s]%s — BEGIN[/color][/center]" % [
 		Design.ACCENT.to_html(false), screen_title().to_upper()])
 
 	await get_tree().create_timer(0.7).timeout
 	_run()
+
+
+# What the record needs to know about this fight that the sim does not:
+# where it happened, what the sky was doing, how deep it was, and whether
+# the thing on the other side has a name worth writing down.
+func _ledger_context() -> Dictionary:
+	var context := {
+		"zone": "",
+		"weather": "",
+		"floor": 0,
+		"boss": "",
+	}
+
+	if GameState.weather.is_active():
+		context["weather"] = str(GameState.weather.active.get("name", ""))
+
+	match mode:
+		"raid":
+			context["boss"] = GameState.clan.raid_boss
+			context["zone"] = "the raid"
+		"gauntlet":
+			context["zone"] = "the gauntlet"
+		"duel":
+			context["zone"] = "the city"
+			context["boss"] = "the Boy"
+		_:
+			context["floor"] = floor_number
+			context["zone"] = Campaign.zone_name_for_floor(floor_number)
+			# Only boss stages get a name. An ordinary floor is somewhere
+			# a card has been, not something it has beaten.
+			var stage := Campaign.stage_index_for_floor(floor_number)
+			if Campaign.is_boss_stage(stage):
+				context["boss"] = "%s of %s" % [
+					Campaign.stage_label(floor_number), context["zone"]]
+
+	return context
 
 
 # The gauntlet's whole point: wave two starts on whatever wave one left

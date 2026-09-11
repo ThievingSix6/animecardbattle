@@ -22,6 +22,11 @@ func add(template: CardData, copies: int = 1) -> CardData:
 	if is_new:
 		var copy: CardData = template.duplicate()
 		copy.obtained = true
+		# The record starts the moment the card is yours, so "how long
+		# have I had this" is answerable for every card from here on.
+		# A card pulled before the Ledger existed gets its record the
+		# first time anything touches it instead.
+		copy.ledger = Ledger.blank()
 		owned[copy.card_id] = copy
 		if copies > 1:
 			duplicates[copy.card_id] = copies - 1

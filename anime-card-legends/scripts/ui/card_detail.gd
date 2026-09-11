@@ -85,8 +85,37 @@ func _populate() -> void:
 	if GameState.collection.has(card.card_id):
 		body.add_child(UI.separator())
 		body.add_child(_build_level())
+		body.add_child(_build_record())
 
 	body.add_child(_build_actions())
+
+
+# THE CARD'S BACK.
+#
+# Deliberately prose and deliberately not a stat block. "Fought 214
+# battles, won 138. Fell 31 times." reads as a life. "battles: 214" reads
+# as a column, and a column invites optimising - which is the one thing
+# this must never become. The record makes the card no stronger; it is
+# only a description of what it has been through.
+#
+# Shown for the player's own copy only. A card in the gacha preview has
+# no history yet, and saying so there would be noise.
+func _build_record() -> Control:
+	var owned: CardData = GameState.collection.owned.get(card.card_id, card)
+	var lines := Ledger.record_lines(owned)
+
+	var panel := UI.vbox(Design.S2)
+	panel.add_child(UI.section("RECORD"))
+
+	if lines.is_empty():
+		panel.add_child(UI.caption("Nothing has happened to this card yet."))
+		return panel
+
+	var prose := " ".join(lines)
+	var text := UI.label(prose, Design.FS_SMALL, Design.TEXT_DIM)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	panel.add_child(text)
+	return panel
 
 
 func _build_topbar() -> HBoxContainer:
@@ -318,6 +347,15 @@ func _on_sell() -> void:
 		GameState.sell_card(card.card_id)
 		changed.emit()
 		close()
+	)
+	# Backing out is worth remembering. A card you have opened this
+	# dialog on and then changed your mind about three times is a card
+	# with a story, and it costs two lines to record it.
+	dialog.canceled.connect(func():
+		var kept: CardData = GameState.collection.owned.get(card.card_id)
+		if kept != null:
+			Ledger.bump(kept, Ledger.SPARED)
+			GameState.request_save()
 	)
 	dialog.popup_centered()
 
