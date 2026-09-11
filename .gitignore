@@ -1,0 +1,49 @@
+# =========================================================
+# Anime Card Legends
+#
+# Everything here is something GODOT GENERATES. None of it is authored,
+# all of it comes back automatically the first time the project is
+# opened, and all of it churns whenever the editor version changes - so
+# committing it means merge conflicts over files nobody wrote.
+# =========================================================
+
+# Textures Godot EXTRACTS out of the .glb files on import - diablo_0.png,
+# base_basic_pbr_texture_diffuse.png and so on. They are copies of data
+# that already lives inside the .glb.
+#
+# The exceptions are the sidecar emissive maps, which ARE authored: a
+# model exported without its emission slot assigned still ships the map
+# as a loose file beside it, and scripts/lobby3d/models.gd picks it up
+# from there. Those must stay in the repository.
+anime-card-legends/art/models/**/*.png
+anime-card-legends/art/models/**/*.jpg
+anime-card-legends/art/models/**/*.jpeg
+anime-card-legends/art/models/**/*.webp
+!anime-card-legends/art/models/**/*emissive*
+!anime-card-legends/art/models/**/*emission*
+!anime-card-legends/art/models/**/*glow*
+
+# These three come last on purpose. A .gitignore is read top to bottom
+# and the last rule to match wins, so the re-inclusions above would
+# otherwise drag texture_emissive.png.import back in with the map itself.
+
+# The import cache. 700 MB+ once the .glb models have been imported.
+.godot/
+
+# Per-asset import settings, written beside every image, sound and model.
+*.import
+
+# Resource UIDs, written beside every script (Godot 4.4+).
+*.uid
+
+# Exported builds.
+/build/
+/export/
+*.pck
+
+# Editors and operating systems.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*~
