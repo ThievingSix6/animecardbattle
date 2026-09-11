@@ -128,6 +128,30 @@ func loop(key: String) -> AudioStreamPlayer:
 	return voice
 
 
+# A dedicated one-shot voice the caller owns, for a sound that has to
+# be started, stopped and timed precisely - the boost chain, where the
+# next stage begins exactly when this one ends. The shared voice pool
+# cannot do that, because it hands out whichever voice is free.
+func voice(key: String) -> AudioStreamPlayer:
+	var stream := _stream(key)
+	if stream == null:
+		return null
+
+	var player := AudioStreamPlayer.new()
+	player.stream = stream
+	add_child(player)
+	return player
+
+
+# How long a sound runs, so a chain can be timed off the files
+# themselves rather than off numbers that drift when they are re-cut.
+func length_of(key: String) -> float:
+	var stream := _stream(key)
+	if stream == null:
+		return 0.0
+	return stream.get_length()
+
+
 func play_music(key: String) -> void:
 	if _current_music == key:
 		return

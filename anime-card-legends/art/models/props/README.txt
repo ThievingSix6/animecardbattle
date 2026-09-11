@@ -75,6 +75,25 @@ emissive map, so a misnamed file is visible instead of silently
 ignored.
 
 
+THE BALL
+--------
+
+  ball.glb       the Rocket Arena's ball
+  soccer_ball.glb  also accepted, since that is what it tends to get
+                   called
+
+Scaled to 14.6 m across - Rocket League's ball is 1.55 car-lengths
+wide, and this one is too. Its origin is treated as the middle of the
+ball, which is where a sphere's origin belongs.
+
+Physics are generated to RL's figures (mass 30, 0.6 restitution), so
+the model is the skin and nothing else. Without one it draws a lit
+sphere.
+
+This slot existed before it was written down here - that was an
+oversight, not a missing feature.
+
+
 THE STADIUM
 -----------
 

@@ -29,6 +29,21 @@ const GOAL_DEPTH := GOAL_DEPTH_UU * CarBody.UU
 const MATCH_SECONDS := 300.0
 const KICKOFF_PAUSE := 2.0
 
+# --- Crowd ------------------------------------------------------------
+#
+# soccar_crowd.ogg runs under the whole match, quiet, and swells for a
+# few seconds whenever something happens. The one-shots ride over it.
+const CROWD_BED := 0.35
+const CROWD_SWELL := 1.0
+const CROWD_SETTLE := 0.6      # how fast a swell decays, per second
+
+# A shot that beats the keeper and misses the mouth: past the goal line
+# by depth, outside the posts, and travelling.
+const NEAR_MISS_SPEED := 0.2   # fraction of the ball's top speed
+const NEAR_MISS_COOLDOWN := 2.5
+
+const WARNING_AT := 30.0
+
 const BLUE := Color("#3b82f6")
 const ORANGE := Color("#f5a623")
 
@@ -43,6 +58,11 @@ var _clock := MATCH_SECONDS
 var _kickoff := KICKOFF_PAUSE
 var _over := false
 var _bot_brain: ArenaBot
+
+var _crowd: AudioStreamPlayer
+var _crowd_level := CROWD_BED
+var _near_miss_cooldown := 0.0
+var _warned := false
 
 
 func _ready() -> void:
@@ -254,7 +274,8 @@ func _on_goal(entered: Node, scorer: String) -> void:
 	if _over or entered != ball:
 		return
 	_score[scorer] = int(_score[scorer]) + 1
-	Audio.play("victory")
+	Audio.play("soccar_goal")
+	_swell()
 	if hud != null:
 		hud.announce("%s SCORES" % scorer.to_upper())
 		hud.set_score(int(_score["blue"]), int(_score["orange"]))
@@ -265,6 +286,7 @@ func _on_goal(entered: Node, scorer: String) -> void:
 
 func _build_actors() -> void:
 	ball = ArenaBall.create()
+	ball.hit.connect(_on_ball_hit)
 	add_child(ball)
 
 	car = CarBody.create()
@@ -289,12 +311,16 @@ func _build_hud() -> void:
 	add_child(hud)
 	hud.set_score(0, 0)
 
+	_crowd = Audio.loop("soccar_crowd")
+	_apply_crowd()
+
 
 # --- Match flow ---------------------------------------------------------
 
 func _kick_off() -> void:
 	_kickoff = KICKOFF_PAUSE
 	ball.reset_to(Vector3(0, ArenaBall.RADIUS * 1.2, 0))
+	Audio.play("soccar_lets_go")
 
 	car.global_position = Vector3(0, car.ride_height() + 0.5, HALF_LENGTH * 0.62)
 	car.linear_velocity = Vector3.ZERO
@@ -326,6 +352,16 @@ func _process(delta: float) -> void:
 		hud.set_clock(_clock)
 		hud.show_boost(car.boost_fraction(), car.speed())
 
+	# The clock crossing half a minute is worth calling.
+	if not _warned and _clock <= WARNING_AT:
+		_warned = true
+		Audio.play("30_second_warning")
+		if hud != null:
+			hud.announce("30 SECONDS")
+
+	_watch_for_near_miss(delta)
+	_settle_crowd(delta)
+
 	if _clock <= 0.0:
 		_finish()
 		return
@@ -344,17 +380,74 @@ func _finish() -> void:
 	var verdict := "DRAW"
 	if blue > orange:
 		verdict = "YOU WIN"
+		Audio.play("soccar_game_win")
+		_swell()
 		# Winning pays, so the mode is worth playing more than once.
 		GameState.add_gems(150)
 		GameState.add_gold(6000)
 		GameState.save_now()
 	elif orange > blue:
 		verdict = "YOU LOSE"
+		Audio.play("defeat")
 
 	if hud != null:
 		hud.finish(verdict, blue, orange)
 
 
+# --- Crowd -----------------------------------------------------------
+
+# A hard touch gets a reaction; a dribble does not.
+func _on_ball_hit(strength: float) -> void:
+	if strength > ArenaBall.HIT_HARD_SPEED:
+		_swell(0.7)
+
+
+# Past the goal line and outside the posts, moving: the shot that was
+# nearly something.
+func _watch_for_near_miss(delta: float) -> void:
+	_near_miss_cooldown = maxf(0.0, _near_miss_cooldown - delta)
+	if _near_miss_cooldown > 0.0 or ball == null:
+		return
+
+	var at := ball.global_position
+	if absf(at.z) < HALF_LENGTH * 0.9:
+		return
+	if absf(at.x) < GOAL_HALF_WIDTH:
+		return
+	if ball.linear_velocity.length() < ArenaBall.MAX_SPEED * NEAR_MISS_SPEED:
+		return
+
+	_near_miss_cooldown = NEAR_MISS_COOLDOWN
+	Audio.play("soccar_gasp")
+	_swell(0.5)
+
+
+func _swell(amount: float = 1.0) -> void:
+	_crowd_level = maxf(_crowd_level, CROWD_BED + (CROWD_SWELL - CROWD_BED) * amount)
+	_apply_crowd()
+
+
+func _settle_crowd(delta: float) -> void:
+	if _crowd_level <= CROWD_BED:
+		return
+	_crowd_level = maxf(CROWD_BED, _crowd_level - CROWD_SETTLE * delta)
+	_apply_crowd()
+
+
+func _apply_crowd() -> void:
+	if _crowd == null:
+		return
+	_crowd.volume_db = linear_to_db(maxf(0.0001, _crowd_level * Settings.sfx_volume))
+
+
 func _leave() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(Routes.back_to_hub())
+
+
+# Audio.loop() parents its voices to the Audio autoload, which outlives
+# this scene - so they have to be taken down by hand or the crowd
+# follows you back into the city.
+func _exit_tree() -> void:
+	if _crowd != null and is_instance_valid(_crowd):
+		_crowd.queue_free()

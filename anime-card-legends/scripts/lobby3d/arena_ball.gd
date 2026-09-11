@@ -70,11 +70,16 @@ func _build_skin() -> void:
 	sphere.rings = 16
 	mesh.mesh = sphere
 
-	# A model at res://art/models/props/ball.glb replaces this.
+	# res://art/models/props/ball.glb - or soccer_ball.glb, since that
+	# is what it tends to get called.
 	var model := Models.spawn_prop("ball")
+	if model == null:
+		model = Models.spawn_prop("soccer_ball")
 	if model != null:
 		add_child(model)
 		Models.fit_length(model, RADIUS * 2.0)
+		# Centred on the body's origin, which is the middle of a ball,
+		# not its base.
 		model.position.y -= RADIUS
 		_build_glow()
 		return
@@ -110,9 +115,15 @@ func _physics_process(delta: float) -> void:
 	_last_velocity = linear_velocity
 
 
-# res://audio/ball_hit.ogg, at a volume set by how much the impact
-# actually changed the ball's velocity - so a gentle dribble is quiet
-# and a boosted flip is not.
+# Three recordings, chosen by how much the impact actually changed the
+# ball's velocity, with the volume trimmed within each band. A dribble
+# gets the light hit quietly; a boosted flip gets the hard one at full
+# strength; and the bands overlap enough that the change between them
+# is not audible as a switch.
+const HIT_MEDIUM_SPEED := 0.16     # fraction of the ball's top speed
+const HIT_HARD_SPEED := 0.34
+
+
 func _on_contact(_body: Node) -> void:
 	if _hit_cooldown > 0.0:
 		return
@@ -122,8 +133,31 @@ func _on_contact(_body: Node) -> void:
 	if change < HIT_SPEED:
 		return
 
-	var force := clampf(change / (MAX_SPEED * 0.35), 0.15, 1.0)
-	Audio.play_at("ball_hit", force)
+	var strength := change / MAX_SPEED
+
+	var key := "ball_hit_light"
+	var floor_speed := 0.0
+	var ceiling := HIT_MEDIUM_SPEED
+	if strength >= HIT_HARD_SPEED:
+		key = "ball_hit_hard"
+		floor_speed = HIT_HARD_SPEED
+		ceiling = HIT_HARD_SPEED * 2.0
+	elif strength >= HIT_MEDIUM_SPEED:
+		key = "ball_hit_medium"
+		floor_speed = HIT_MEDIUM_SPEED
+		ceiling = HIT_HARD_SPEED
+
+	# Loudness within the band, so the quietest hard hit is not as loud
+	# as the hardest.
+	var within := clampf((strength - floor_speed) / maxf(ceiling - floor_speed, 0.001), 0.0, 1.0)
+	Audio.play_at(key, lerpf(0.55, 1.0, within))
+
+	hit.emit(strength)
+
+
+# How hard, as a fraction of the ball's top speed. The arena listens so
+# the crowd can react.
+signal hit(strength: float)
 
 
 func reset_to(at: Vector3) -> void:

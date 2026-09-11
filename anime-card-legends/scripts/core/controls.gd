@@ -97,10 +97,11 @@ const ACTIONS: Array[Dictionary] = [
 		"axis": [],
 	},
 	{
-		# Circle. Not a shoulder button, because R1 is powerslide.
+		# L1. R1 is powerslide, so the two shoulders are the two things
+		# you hold while cornering.
 		"name": "acl_boost",
 		"keys": [KEY_SHIFT],
-		"buttons": [JOY_BUTTON_B],
+		"buttons": [JOY_BUTTON_LEFT_SHOULDER],
 		"axis": [],
 	},
 	{

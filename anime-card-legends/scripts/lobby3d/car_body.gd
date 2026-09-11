@@ -134,15 +134,36 @@ var _recovering := 0.0
 
 var _trails: Array[CPUParticles3D] = []
 
-# res://audio/engine.ogg and boost.ogg, both optional. The engine's
-# pitch and volume follow the throttle and the speed; the boost fades
-# in and out with the flame rather than clicking on.
-var _engine: AudioStreamPlayer
-var _boost_voice: AudioStreamPlayer
+# --- Sound ------------------------------------------------------------
+#
+# ENGINE: two loops crossfaded. engine_idle.ogg sits under the car
+# whenever someone is in it; engine.ogg rises as it actually moves, and
+# its pitch tracks speed. Crossfading rather than switching means there
+# is no click at the moment the car starts rolling.
+#
+# BOOST: a three-part chain, because that is how the files are cut.
+# boost.ogg fires on the press, boost2.ogg follows the instant it ends,
+# and boost3.ogg loops from there until the button comes up or the tank
+# runs dry. The hand-off is timed from the files' own lengths rather
+# than hardcoded, so re-cutting a sound does not desync the chain.
+var _engine_idle: AudioStreamPlayer
+var _engine_drive: AudioStreamPlayer
+var _boost_start: AudioStreamPlayer
+var _boost_follow: AudioStreamPlayer
+var _boost_loop: AudioStreamPlayer
+
+var _boost_stage := 0
+var _boost_timer := 0.0
+var _boost_start_length := 0.0
+var _boost_follow_length := 0.0
+
 const ENGINE_PITCH_IDLE := 0.7
 const ENGINE_PITCH_MAX := 2.1
-const ENGINE_VOLUME := 0.5
+const ENGINE_VOLUME := 0.55
+const IDLE_VOLUME := 0.4
 const SOUND_FADE := 6.0
+# Above this fraction of top speed the driving loop is fully in.
+const ENGINE_BLEND_SPEED := 0.18
 
 
 static func create() -> CarBody:
@@ -167,12 +188,29 @@ func _ready() -> void:
 	_build_suspension()
 	_build_trails()
 
-	_engine = Audio.loop("engine")
-	_boost_voice = Audio.loop("boost")
+	_engine_idle = Audio.loop("engine_idle")
+	_engine_drive = Audio.loop("engine")
+	_boost_loop = Audio.loop("boost3")
+	_boost_start = Audio.voice("boost")
+	_boost_follow = Audio.voice("boost2")
+	_boost_start_length = Audio.length_of("boost")
+	_boost_follow_length = Audio.length_of("boost2")
 
 
 func ride_height() -> float:
 	return RIDE_HEIGHT
+
+
+# Audio.loop() and Audio.voice() parent to the Audio autoload, which
+# outlives this scene, so the car's five voices have to be taken down
+# with it. Otherwise an engine keeps running in the menus.
+func _exit_tree() -> void:
+	var voices: Array[AudioStreamPlayer] = [
+		_engine_idle, _engine_drive, _boost_loop, _boost_start, _boost_follow,
+	]
+	for voice in voices:
+		if voice != null and is_instance_valid(voice):
+			voice.queue_free()
 
 
 # --- Construction ---------------------------------------------------
@@ -320,10 +358,14 @@ func take_control() -> void:
 func release_control() -> void:
 	driver_seated = false
 	_set_boosting(false)
-	if _engine != null:
-		_engine.volume_db = linear_to_db(0.0001)
-	if _boost_voice != null:
-		_boost_voice.volume_db = linear_to_db(0.0001)
+	_end_boost_sound()
+	_silence(_engine_idle)
+	_silence(_engine_drive)
+
+
+func _silence(voice: AudioStreamPlayer) -> void:
+	if voice != null:
+		voice.volume_db = linear_to_db(0.0001)
 
 
 func speed() -> float:
@@ -674,22 +716,77 @@ func _apply_boost(boosting: bool, delta: float) -> void:
 	_set_boosting(false)
 
 
-# Engine pitch tracks speed, its volume tracks the throttle, and both
-# fade rather than switch - an engine that snaps to silence the moment
-# the stick centres sounds broken.
 func _update_sound(throttle: float, boosting: bool, delta: float) -> void:
+	_update_engine(throttle, delta)
+	_update_boost_sound(boosting, delta)
+
+
+# The two loops crossfade on how much the car is actually doing, so
+# idle is what you hear sitting still and the driving loop takes over
+# as it rolls.
+func _update_engine(throttle: float, delta: float) -> void:
 	var fraction := clampf(speed() / MAX_SPEED, 0.0, 1.0)
+	var effort := clampf(fraction / ENGINE_BLEND_SPEED, 0.0, 1.0)
+	effort = maxf(effort, absf(throttle))
 
-	if _engine != null:
-		_engine.pitch_scale = lerpf(ENGINE_PITCH_IDLE, ENGINE_PITCH_MAX, fraction)
-		var wanted := ENGINE_VOLUME * (0.35 + 0.65 * absf(throttle))
-		_fade(_engine, wanted * Settings.sfx_volume, delta)
+	if _engine_drive != null:
+		_engine_drive.pitch_scale = lerpf(ENGINE_PITCH_IDLE, ENGINE_PITCH_MAX, fraction)
+		_fade(_engine_drive, ENGINE_VOLUME * effort * Settings.sfx_volume, delta)
 
-	if _boost_voice != null:
-		var boost_level := 0.0
-		if boosting:
-			boost_level = Settings.sfx_volume
-		_fade(_boost_voice, boost_level, delta)
+	if _engine_idle != null:
+		_fade(_engine_idle, IDLE_VOLUME * (1.0 - effort) * Settings.sfx_volume, delta)
+
+
+# boost -> boost2 -> boost3 looping, each handing over as the last one
+# ends. Stage 0 is silent.
+func _update_boost_sound(boosting: bool, delta: float) -> void:
+	if not boosting:
+		if _boost_stage != 0:
+			_end_boost_sound()
+		if _boost_loop != null:
+			_fade(_boost_loop, 0.0, delta)
+		return
+
+	if _boost_stage == 0:
+		_boost_stage = 1
+		_boost_timer = _boost_start_length
+		_play_once(_boost_start)
+		# No first file: skip straight to the loop rather than stalling.
+		if _boost_start_length <= 0.0:
+			_boost_stage = 2
+			_boost_timer = _boost_follow_length
+			_play_once(_boost_follow)
+
+	elif _boost_stage == 1:
+		_boost_timer -= delta
+		if _boost_timer <= 0.0:
+			_boost_stage = 2
+			_boost_timer = _boost_follow_length
+			_play_once(_boost_follow)
+
+	elif _boost_stage == 2:
+		_boost_timer -= delta
+		if _boost_timer <= 0.0:
+			_boost_stage = 3
+
+	if _boost_stage == 3 and _boost_loop != null:
+		_fade(_boost_loop, Settings.sfx_volume, delta)
+
+
+func _play_once(voice: AudioStreamPlayer) -> void:
+	if voice == null:
+		return
+	voice.volume_db = linear_to_db(maxf(0.0001, Settings.sfx_volume))
+	voice.play()
+
+
+func _end_boost_sound() -> void:
+	_boost_stage = 0
+	_boost_timer = 0.0
+	if _boost_start != null:
+		_boost_start.stop()
+	if _boost_follow != null:
+		_boost_follow.stop()
 
 
 func _fade(voice: AudioStreamPlayer, target: float, delta: float) -> void:
