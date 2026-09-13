@@ -61,10 +61,10 @@ func _physics_process(_delta: float) -> void:
 		_lost = true
 
 	if _stage == 0:
-		if _car.global_position.z < -300.0:
+		if _car.global_position.z < -ArenaShell.half_length() * 0.73:
 			var back := _car.global_transform
-			back.origin.z = 380.0
-			back.origin.x = 200.0
+			back.origin.z = ArenaShell.half_length() * 0.93
+			back.origin.x = ArenaShell.half_width() * 0.61
 			_car.global_transform = back
 			return
 		if _frames > 260:
@@ -128,7 +128,8 @@ func _judge(what: String, problem: String) -> void:
 func _begin() -> void:
 	_frames = 0
 	if _stage == 0:
-		_place(Vector3(200.0, CarBody.RIDE_HEIGHT, 380.0), Vector3.FORWARD)
+		_place(Vector3(ArenaShell.half_width() * 0.61, CarBody.RIDE_HEIGHT,
+			ArenaShell.half_length() * 0.93), Vector3.FORWARD)
 	elif _stage == 1:
 		_place(Vector3(0.0, CarBody.RIDE_HEIGHT, 0.0), Vector3.RIGHT)
 	elif _stage == 2:

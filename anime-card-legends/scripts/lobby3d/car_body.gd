@@ -36,9 +36,12 @@ extends RigidBody3D
 # bridge between Rocket League's units and metres.
 #
 # Octane's hitbox is 118.01 uu long. Everything follows from how long
-# this car is in metres.
+# this car is in metres - 2.7, per art/models/props/README.txt and the
+# car's own original value. It drifted to 9.45 when this switched to
+# RL's unit system and nothing walked it back, which is also why the
+# pitch was computing to 656 x 820 m instead of a sane ~187 x 234 m.
 const OCTANE_LENGTH_UU := 118.01
-const CAR_LENGTH := 9.45
+const CAR_LENGTH := 2.7
 const UU := CAR_LENGTH / OCTANE_LENGTH_UU
 
 const CAR_WIDTH := 84.2 * UU
