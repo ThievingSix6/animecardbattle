@@ -113,6 +113,58 @@ const ALL: Array[Dictionary] = [
 		"pity_legendary": 70,
 	},
 	{
+		"id": "vanguard",
+		"name": "Vanguard's Call",
+		"tagline": "Commanders, oracles and heralds who rally everyone behind them.",
+		"accent": Color("#c9a227"),
+		"elements": [],
+		"roles": [],
+		"rate_up": 3.0,
+		"cost_mult": 1.0,
+		"floor": "Common",
+		"pity_epic": 10,
+		"pity_legendary": 70,
+	},
+	{
+		"id": "ruinbound",
+		"name": "The Ruinbound Court",
+		"tagline": "Kings, generals and things that used to be kings and generals.",
+		"accent": Color("#5a2d6b"),
+		"elements": [],
+		"roles": [],
+		"rate_up": 3.0,
+		"cost_mult": 1.5,
+		"floor": "Rare",
+		"pity_epic": 8,
+		"pity_legendary": 60,
+	},
+	{
+		"id": "pantheon",
+		"name": "The Starforged Pantheon",
+		"tagline": "Emperors, gods and one angel who fell the wrong way. Never below Legendary.",
+		"accent": Color("#8a4fff"),
+		"elements": [],
+		"roles": [],
+		"rate_up": 3.0,
+		"cost_mult": 3.0,
+		"floor": "Legendary",
+		"pity_epic": 1,
+		"pity_legendary": 1,
+	},
+	{
+		"id": "curiosities",
+		"name": "Cabinet of Curiosities",
+		"tagline": "Lantern keepers, fox spirits and one very cheerful plague doctor.",
+		"accent": Color("#2ca089"),
+		"elements": [],
+		"roles": [],
+		"rate_up": 3.0,
+		"cost_mult": 1.0,
+		"floor": "Common",
+		"pity_epic": 10,
+		"pity_legendary": 70,
+	},
+	{
 		"id": "legends",
 		"name": "Legends Awakened",
 		"tagline": "Costs more. Never produces anything below Epic.",
@@ -126,6 +178,41 @@ const ALL: Array[Dictionary] = [
 		"pity_legendary": 40,
 	},
 ]
+
+# Cards pinned to a specific banner by name rather than derived from
+# element/role - a themed roster someone actually curated (a named pack)
+# rather than a bucket the deterministic generator happened to fill.
+# Checked before banner_for() falls back to the element/role guess.
+const NAME_BANNERS := {
+	# Vanguard's Call
+	"banner commander": "vanguard", "rune engineer": "vanguard", "battle bard": "vanguard",
+	"war oracle": "vanguard", "spirit shepherd": "vanguard", "dragon herald": "vanguard",
+	"warlord of ages": "vanguard", "lionheart": "vanguard",
+	# The Ruinbound Court
+	"the hollow king": "ruinbound", "abyssal beast": "ruinbound", "plague alchemist": "ruinbound",
+	"demon general": "ruinbound", "the mirror queen": "ruinbound", "rotwood colossus": "ruinbound",
+	"void dragonkin": "ruinbound", "the marionette": "ruinbound", "shadow blade": "ruinbound",
+	"the forgotten": "ruinbound",
+	# The Starforged Pantheon
+	"starforged emperor": "pantheon", "dragon empress": "pantheon",
+	"the world tree guardian": "pantheon", "eclipse angel": "pantheon",
+	"the forgotten god": "pantheon", "phoenix king": "pantheon", "void queen": "pantheon",
+	"dark savior": "pantheon",
+	# Cabinet of Curiosities
+	"the lantern keeper": "curiosities", "clockwork knight": "curiosities",
+	"the fox spirit": "curiosities", "graveyard witch": "curiosities",
+	"the mask collector": "curiosities", "cursed prince": "curiosities",
+	"the bone smith": "curiosities", "cloud samurai": "curiosities",
+	"the candle knight": "curiosities", "the smiling plague doctor": "curiosities",
+	"mystic mage": "curiosities",
+}
+
+
+# The pinned banner for a curated card, or "" for everything else - which
+# is everything the procedural generator makes, and any art the player
+# drops in without landing on one of the names above.
+static func explicit_banner_for(display_name: String) -> String:
+	return str(NAME_BANNERS.get(display_name.to_lower(), ""))
 
 
 static func ids() -> Array[String]:

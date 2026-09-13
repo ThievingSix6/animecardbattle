@@ -95,7 +95,8 @@ static func card_from_path(path: String) -> CardData:
 	# Pin the exact image. Without this, "grave_knight_awakened" resolves
 	# by name back to grave_knight's picture.
 	card.art_path = path
-	card.banner_id = Banners.banner_for(card.element, card.role)
+	var pinned := Banners.explicit_banner_for(display_name)
+	card.banner_id = pinned if pinned != "" else Banners.banner_for(card.element, card.role)
 
 	_apply_stats(card, rng)
 	_apply_abilities(card, rng)
