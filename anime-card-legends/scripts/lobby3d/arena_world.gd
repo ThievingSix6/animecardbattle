@@ -439,6 +439,9 @@ func _build_actors() -> void:
 
 	for i in _team_size:
 		var blue := CarBody.create()
+		# Set before add_child(): _build_shell() reads team_color once,
+		# in _ready(), which runs as the car enters the tree below.
+		blue.team_color = BLUE
 		add_child(blue)
 		blue_team.append(blue)
 		# The first blue car is the player's; anything after it is a
@@ -450,6 +453,7 @@ func _build_actors() -> void:
 			_add_brain(blue, HALF_LENGTH, i)
 
 		var orange := CarBody.create()
+		orange.team_color = ORANGE
 		add_child(orange)
 		orange_team.append(orange)
 		_add_brain(orange, -HALF_LENGTH, i)

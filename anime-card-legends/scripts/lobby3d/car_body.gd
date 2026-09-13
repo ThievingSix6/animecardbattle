@@ -94,6 +94,16 @@ const WHEEL_NAMES: Array[String] = ["FrontLeft", "FrontRight", "RearLeft", "Rear
 @export var model_pitch := 0.0
 @export var model_roll := 0.0
 
+# Set BEFORE this car enters the tree (_build_shell() reads it once, in
+# _ready()) - Arena.tscn paints its two teams with it. Left at WHITE
+# anywhere a car has no team - the city, the garage preview - so nothing
+# there looks tinted for no reason.
+var team_color := Color.WHITE
+# How strongly the team colour washes the car's own paint. Low enough
+# that the model's own livery still reads; high enough that blue and
+# orange are unmistakable from across the pitch.
+const TEAM_TINT_STRENGTH := 0.4
+
 @export_group("Driving")
 @export var max_speed_uu := 2300.0
 @export var max_speed_no_boost_uu := 1410.0
@@ -362,9 +372,47 @@ func _build_shell() -> void:
 		# The model is seated on y = 0; its wheels belong on the ground,
 		# which is RIDE_HEIGHT below the body's origin.
 		holder.position.y -= RIDE_HEIGHT
+		_tint_for_team(model)
 		return
 
 	_build_placeholder()
+
+
+# Washes every surface's own albedo toward team_color. Skipped entirely
+# when there is no team, so a city or garage car keeps its own paint
+# exactly as exported.
+func _tint_for_team(root: Node) -> void:
+	if team_color.is_equal_approx(Color.WHITE):
+		return
+	_tint_surfaces(root)
+
+
+func _tint_surfaces(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_node: MeshInstance3D = node
+		if mesh_node.mesh != null:
+			for i in mesh_node.mesh.get_surface_count():
+				_tint_surface(mesh_node, i)
+	for child in node.get_children():
+		_tint_surfaces(child)
+
+
+func _tint_surface(mesh_node: MeshInstance3D, surface: int) -> void:
+	var source: Material = mesh_node.get_surface_override_material(surface)
+	if source == null:
+		source = mesh_node.mesh.surface_get_material(surface)
+	# BaseMaterial3D, not StandardMaterial3D: glTF imports can arrive as
+	# ORMMaterial3D, a sibling class rather than a subclass.
+	if source == null or not (source is BaseMaterial3D):
+		return
+
+	var base: BaseMaterial3D = source
+	# Duplicated so two cars sharing one imported model never fight over
+	# the same material resource - the same reason Models._light_surface()
+	# duplicates before touching an emissive map.
+	var tinted: BaseMaterial3D = base.duplicate()
+	tinted.albedo_color = base.albedo_color.lerp(team_color, TEAM_TINT_STRENGTH)
+	mesh_node.set_surface_override_material(surface, tinted)
 
 
 # A wedge pointed at -Z, so which way it faces is never in doubt.
@@ -376,7 +424,7 @@ func _build_placeholder() -> void:
 	body.position.y = CAR_HEIGHT * 0.5
 
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color("#e8552c")
+	mat.albedo_color = team_color if not team_color.is_equal_approx(Color.WHITE) else Color("#e8552c")
 	mat.roughness = 0.35
 	mat.metallic = 0.4
 	body.material_override = mat
