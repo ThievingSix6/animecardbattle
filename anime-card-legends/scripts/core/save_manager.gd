@@ -146,6 +146,8 @@ static func save(slot: int, wallet: Dictionary, collection: CollectionSystem, pr
 		"gauntlet_best": progression.gauntlet_best,
 		"gauntlet_cleared": progression.gauntlet_cleared,
 		"boy_defeated": progression.boy_defeated,
+		"boy_dark_defeated": progression.boy_dark_defeated,
+		"boss_defeated": progression.boss_defeated,
 		"boss_pool_unlocked": gacha.boss_pool_unlocked,
 		"pity": gacha.pity,
 		"items_owned": equipment.owned,
@@ -228,6 +230,8 @@ static func load_into(slot: int, wallet: Dictionary, collection: CollectionSyste
 	progression.gauntlet_best = int(parsed.get("gauntlet_best", 0))
 	progression.gauntlet_cleared = bool(parsed.get("gauntlet_cleared", false))
 	progression.boy_defeated = bool(parsed.get("boy_defeated", false))
+	progression.boy_dark_defeated = bool(parsed.get("boy_dark_defeated", false))
+	progression.boss_defeated = bool(parsed.get("boss_defeated", false))
 	progression.end_gauntlet()
 
 	gacha.boss_pool_unlocked = bool(parsed.get("boss_pool_unlocked", false))

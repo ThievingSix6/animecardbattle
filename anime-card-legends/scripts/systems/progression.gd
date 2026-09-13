@@ -16,7 +16,9 @@ var roll_packs: Dictionary = {}
 #   "floor"    a campaign stage, using pending_floor
 #   "raid"     the clan raid boss
 #   "gauntlet" a wave of the Hellfire Gauntlet, using gauntlet_wave
-#   "duel"     The Boy
+#   "duel"        The Boy
+#   "duel_dark"   The Boy, Dark
+#   "duel_boss"   The Boss, guarding the Rocket Arena
 var pending_mode := "floor"
 
 # ---------------- HELLFIRE GAUNTLET ----------------
@@ -34,6 +36,10 @@ var boy_defeated := false
 # Transient: set by the duel and consumed by the city, so he is found
 # on the floor the one time you walk back in having just beaten him.
 var boy_just_lost := false
+
+# Same idea, for the two newer duels.
+var boy_dark_defeated := false
+var boss_defeated := false
 
 
 # --- Developer shortcuts -------------------------------------------
@@ -63,6 +69,14 @@ func queue_raid() -> void:
 
 func queue_duel() -> void:
 	pending_mode = "duel"
+
+
+func queue_duel_dark() -> void:
+	pending_mode = "duel_dark"
+
+
+func queue_duel_boss() -> void:
+	pending_mode = "duel_boss"
 
 
 # Starts a fresh gauntlet run: full health, wave one.

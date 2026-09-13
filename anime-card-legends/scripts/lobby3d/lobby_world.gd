@@ -195,6 +195,7 @@ func _ready() -> void:
 	_build_portal()
 	_build_stadium_road()
 	_build_npcs()
+	_build_pedestrians()
 	_build_car()
 	_build_player()
 	_build_companion()
@@ -1501,6 +1502,45 @@ func _build_npcs() -> void:
 	var joke_at := Vector3(cos(joke_angle), 0.0, sin(joke_angle)) * _rng.randf_range(18.0, 38.0)
 	_place_npc(Npcs.THE_JOKESTER, joke_at, Npcs.tint(Npcs.THE_JOKESTER))
 
+	# The Boy, Dark roams the same way The Boy does - his own patch of
+	# the district, so the two are never found standing together.
+	var dark_angle := _rng.randf_range(0.0, TAU)
+	var dark_at := Vector3(cos(dark_angle), 0.0, sin(dark_angle)) * _rng.randf_range(90.0, 220.0)
+	var dark := _place_npc(Npcs.THE_BOY_DARK, dark_at, Npcs.tint(Npcs.THE_BOY_DARK))
+	if dark != null:
+		dark.roam_radius = 180.0
+		dark.street_pitch = BLOCK_PITCH
+
+	# The Boss stands watch at the mouth of the causeway - the one spot
+	# between the city and the Arena itself.
+	if grounds != null:
+		var guard_at := grounds.marker_position - grounds.heading * StadiumGrounds.MARKER_RADIUS * 1.6
+		guard_at.y = 0.0
+		_place_npc(Npcs.THE_BOSS, guard_at, Npcs.tint(Npcs.THE_BOSS))
+
+	# Titan waits beside the portal - close enough to be found, clear of
+	# its own interaction ring.
+	if portal != null:
+		var titan_at := portal.position + Vector3(portal.interaction_radius() + 4.0, 0.0, 0.0)
+		_place_npc(Npcs.TITAN, titan_at, Npcs.tint(Npcs.TITAN))
+
+
+func _build_pedestrians() -> void:
+	var pool := Models.list_props("pedestrians")
+	if pool.is_empty():
+		return
+
+	const COUNT := 8
+	for i in COUNT:
+		var model_name: String = pool[_rng.randi() % pool.size()]
+		var ped := Pedestrian.create(model_name)
+		var angle := _rng.randf_range(0.0, TAU)
+		var radius := _rng.randf_range(40.0, 200.0)
+		ped.position = Vector3(cos(angle), 0.0, sin(angle)) * radius
+		ped.roam_radius = _rng.randf_range(50.0, 140.0)
+		ped.street_pitch = BLOCK_PITCH
+		add_child(ped)
+
 
 func _place_npc(npc_id: String, at: Vector3, tint: Color) -> CityNPC:
 	var npc := CityNPC.create(npc_id)
@@ -1533,6 +1573,12 @@ func _talk_to(npc_id: String) -> void:
 			_talk_boy()
 		Npcs.THE_JOKESTER:
 			_talk_jokester()
+		Npcs.THE_BOY_DARK:
+			_talk_boy_dark()
+		Npcs.THE_BOSS:
+			_talk_boss()
+		Npcs.TITAN:
+			_talk_titan()
 
 
 func _talk_diablo() -> void:
@@ -1574,6 +1620,45 @@ func _talk_jokester() -> void:
 	var box := DialogueBox.open(self, Npcs.display_name(Npcs.THE_JOKESTER),
 		Npcs.title(Npcs.THE_JOKESTER), Npcs.jokester_line(_rng),
 		Npcs.tint(Npcs.THE_JOKESTER))
+	box.closed.connect(_on_menu_closed)
+	_menu = box
+
+
+func _talk_boy_dark() -> void:
+	var lines := Npcs.BOY_DARK_GREETING
+	if GameState.progression.boy_dark_defeated:
+		lines = Npcs.BOY_DARK_REMATCH
+
+	var box := DialogueBox.open(self, Npcs.display_name(Npcs.THE_BOY_DARK),
+		Npcs.title(Npcs.THE_BOY_DARK), Npcs.pick(lines, _rng), Npcs.tint(Npcs.THE_BOY_DARK))
+	box.option("Walk away", Callable())
+	box.option("Fight him", func():
+		GameState.progression.queue_duel_dark()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		get_tree().change_scene_to_file(Routes.BATTLE))
+	box.closed.connect(_on_menu_closed)
+	_menu = box
+
+
+func _talk_boss() -> void:
+	var lines := Npcs.BOSS_GREETING
+	if GameState.progression.boss_defeated:
+		lines = Npcs.BOSS_REMATCH
+
+	var box := DialogueBox.open(self, Npcs.display_name(Npcs.THE_BOSS),
+		Npcs.title(Npcs.THE_BOSS), Npcs.pick(lines, _rng), Npcs.tint(Npcs.THE_BOSS))
+	box.option("Not now", Callable())
+	box.option("Challenge The Boss", func():
+		GameState.progression.queue_duel_boss()
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		get_tree().change_scene_to_file(Routes.BATTLE))
+	box.closed.connect(_on_menu_closed)
+	_menu = box
+
+
+func _talk_titan() -> void:
+	var box := DialogueBox.open(self, Npcs.display_name(Npcs.TITAN),
+		Npcs.title(Npcs.TITAN), Npcs.titan_line(_rng), Npcs.tint(Npcs.TITAN))
 	box.closed.connect(_on_menu_closed)
 	_menu = box
 

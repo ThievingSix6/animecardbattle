@@ -16,6 +16,9 @@ extends RefCounted
 const DIABLO := "diablo"
 const THE_BOY := "the_boy"
 const THE_JOKESTER := "the_jokester"
+const THE_BOY_DARK := "the_boy_dark"
+const THE_BOSS := "the_boss"
+const TITAN := "titan"
 
 
 const DEFINITIONS: Array[Dictionary] = [
@@ -45,6 +48,31 @@ const DEFINITIONS: Array[Dictionary] = [
 		"tint": Color("#a855f7"),
 		# Double her original 1.8.
 		"height": 3.6,
+		"wanders": false,
+	},
+	{
+		"id": "the_boy_dark",
+		"name": "The Boy, Dark",
+		"title": "what he could have been",
+		"tint": Color("#7a4ae0"),
+		# Same build as The Boy - he is a version of him, not a giant.
+		"height": 3.2,
+		"wanders": true,
+	},
+	{
+		"id": "the_boss",
+		"name": "The Boss",
+		"title": "guards the Rocket Arena",
+		"tint": Color("#3b82f6"),
+		"height": 3.4,
+		"wanders": false,
+	},
+	{
+		"id": "titan",
+		"name": "Titan",
+		"title": "knows how this all works",
+		"tint": Color("#3ecf7e"),
+		"height": 3.4,
 		"wanders": false,
 	},
 ]
@@ -148,6 +176,101 @@ const JOKESTER_SIGNOFF: Array[String] = [
 static func jokester_line(rng: RandomNumberGenerator) -> String:
 	var tip: String = JOKESTER_TIPS[rng.randi() % JOKESTER_TIPS.size()]
 	var signoff: String = JOKESTER_SIGNOFF[rng.randi() % JOKESTER_SIGNOFF.size()]
+	return tip + "\n\n" + signoff
+
+
+# --- The Boy, Dark ----------------------------------------------------------
+#
+# Not a rematch. A different fight - the same shape as The Boy, built to
+# be worse in every way that matters.
+
+const BOY_DARK_GREETING: Array[String] = [
+	"He never had to be like this.",
+	"You beat him once. That doesn't mean anything here.",
+	"I don't lose. I don't warm up to it either.",
+	"Whatever you brought for him won't be enough for me.",
+]
+
+const BOY_DARK_REMATCH: Array[String] = [
+	"Again, then.",
+	"You're still standing. Fix that.",
+	"That was luck. This won't be.",
+]
+
+const BOY_DARK_WIN: Array[String] = [
+	"Not even close.",
+	"He would have lost that too.",
+	"Come back when it isn't a joke.",
+]
+
+const BOY_DARK_LOSS: Array[String] = [
+	"...",
+	"That's not supposed to happen.",
+	"Fine. Once.",
+]
+
+# Beating him pays better than The Boy - he is meant to be the harder
+# fight of the two.
+const BOY_DARK_REWARD_GEMS := 900
+const BOY_DARK_REWARD_GOLD := 27000
+
+
+# --- The Boss -----------------------------------------------------------
+#
+# Guards the Rocket Arena. A real fight, not a superboss - somewhere in
+# the middle of the campaign's own difficulty curve.
+
+const BOSS_GREETING: Array[String] = [
+	"Nobody drives in without going through me first.",
+	"You want the Arena? Earn it.",
+	"House rules. Beat me, or turn around.",
+]
+
+const BOSS_REMATCH: Array[String] = [
+	"Back again. Good.",
+	"Let's see if that was a fluke.",
+]
+
+const BOSS_WIN: Array[String] = [
+	"Rules are rules. Better luck next time.",
+	"The Arena's still mine.",
+]
+
+const BOSS_LOSS: Array[String] = [
+	"...huh. Fair enough. Go on.",
+	"Not bad. Go race.",
+]
+
+const BOSS_REWARD_GEMS := 450
+const BOSS_REWARD_GOLD := 12000
+
+
+# --- Titan ----------------------------------------------------------------
+#
+# Everything The Jokester says is wrong on purpose. Everything Titan
+# says is right on purpose - real advice, not a fake tip in disguise.
+
+const TITAN_TIPS: Array[String] = [
+	"Merge a card to 100 copies and it ascends - that's the real way past its rarity ceiling, not luck.",
+	"A banner's featured cards get extra pull weight while it's up. Everything else still drops, just rarer.",
+	"Grudges build from fights you've actually had. Bring a card back against something it's lost to before.",
+	"The Legends banner never drops below Epic, but it costs three times as much per pull. Budget for it.",
+	"Passives are grouped by family for a reason - reading the family tells you what a new card is FOR before you check its number.",
+	"A short bench isn't a mistake the game punishes quietly. Outnumbered is named and paid for on purpose.",
+	"Weather boosts one element's pull rate for a while. Worth checking before you spend gems.",
+	"Talents make rolling faster and luckier over time - gold well spent early compounds the whole run.",
+]
+
+const TITAN_SIGNOFF: Array[String] = [
+	"That's really how it works.",
+	"Ask if you want the details.",
+	"Good hunting out there.",
+]
+
+
+static func titan_line(rng: RandomNumberGenerator) -> String:
+	var tip: String = TITAN_TIPS[rng.randi() % TITAN_TIPS.size()]
+	var signoff: String = TITAN_SIGNOFF[rng.randi() % TITAN_SIGNOFF.size()]
 	return tip + "\n\n" + signoff
 
 

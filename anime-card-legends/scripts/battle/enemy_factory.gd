@@ -174,6 +174,103 @@ static func build_boy_deck() -> Array[CardData]:
 	return out
 
 
+# ---------------- THE BOY, DARK ----------------
+#
+# Same shape as The Boy - same five roles, same skills - built stronger.
+# He is not a rematch, he is the fight The Boy would be if nothing held
+# him back.
+const BOY_DARK_DECK: Array[Dictionary] = [
+	{"name": "Fading Light",  "role": "Tank",     "element": "Dark", "skill": "ironhide"},
+	{"name": "Ten Cuts",      "role": "Assassin", "element": "Dark", "skill": "executioners_mark"},
+	{"name": "The Last Note", "role": "Support",  "element": "Dark", "skill": "rallying_cry"},
+	{"name": "Bitter Hour",   "role": "Healer",   "element": "Dark", "skill": "lifebloom"},
+	{"name": "Broken Word",   "role": "DPS",      "element": "Dark", "skill": "kingbreaker"},
+]
+
+const BOY_DARK_SCALE := 6.5
+
+
+static func build_boy_dark_deck() -> Array[CardData]:
+	var out: Array[CardData] = []
+
+	for i in BOY_DARK_DECK.size():
+		var entry: Dictionary = BOY_DARK_DECK[i]
+		var role := str(entry["role"])
+		var shape: Dictionary = Config.ROLE_STATS.get(role, Config.ROLE_STATS["DPS"])
+
+		var card := CardData.new()
+		card.card_id = "boy_dark_%d" % i
+		card.card_name = str(entry["name"])
+		card.role = role
+		card.element = str(entry["element"])
+		card.rarity = "Secret"
+		card.modifier = "Corrupted"
+		card.origin_tag = "boy_dark"
+		card.basic_ability = "Perfect Form"
+		card.ultimate_ability = "Nothing Wasted"
+		card.basic_target_mode = "active"
+		card.ultimate_target_mode = "aoe"
+		card.skill_id = str(entry["skill"])
+
+		card.attack  = max(5,  int(BASE["attack"]  * BOY_DARK_SCALE * shape["attack"] * 1.4))
+		card.defense = max(3,  int(BASE["defense"] * BOY_DARK_SCALE * shape["defense"] * 1.3))
+		card.health  = max(60, int(BASE["health"]  * BOY_DARK_SCALE * shape["health"] * 1.6))
+		card.speed   = max(4,  int(BASE["speed"]   * BOY_DARK_SCALE * shape["speed"]))
+
+		Leveling.apply(card)
+		out.append(card)
+
+	return out
+
+
+# ---------------- THE BOSS ----------------
+#
+# Guards the Rocket Arena. A real fight, but a mid-campaign one - not a
+# superboss like The Boy or The Boy, Dark.
+const BOSS_DECK: Array[Dictionary] = [
+	{"name": "Ironclad Enforcer", "role": "Tank",     "element": "Earth", "skill": "stoneheart"},
+	{"name": "Redline Runner",    "role": "Assassin", "element": "Wind",  "skill": "blinkstrike"},
+	{"name": "Pit Crew Captain",  "role": "Support",  "element": "Fire",  "skill": "battle_standard"},
+	{"name": "Track Medic",       "role": "Healer",   "element": "Water", "skill": "pulse_healer"},
+	{"name": "Number One",        "role": "DPS",       "element": "Fire", "skill": "crushing_blow"},
+]
+
+const BOSS_SCALE := 2.8
+
+
+static func build_boss_deck() -> Array[CardData]:
+	var out: Array[CardData] = []
+
+	for i in BOSS_DECK.size():
+		var entry: Dictionary = BOSS_DECK[i]
+		var role := str(entry["role"])
+		var shape: Dictionary = Config.ROLE_STATS.get(role, Config.ROLE_STATS["DPS"])
+
+		var card := CardData.new()
+		card.card_id = "boss_%d" % i
+		card.card_name = str(entry["name"])
+		card.role = role
+		card.element = str(entry["element"])
+		card.rarity = "Epic"
+		card.modifier = "Normal"
+		card.origin_tag = "boss"
+		card.basic_ability = "House Rules"
+		card.ultimate_ability = "Track Lockout"
+		card.basic_target_mode = "active"
+		card.ultimate_target_mode = "aoe"
+		card.skill_id = str(entry["skill"])
+
+		card.attack  = max(5,  int(BASE["attack"]  * BOSS_SCALE * shape["attack"]))
+		card.defense = max(3,  int(BASE["defense"] * BOSS_SCALE * shape["defense"]))
+		card.health  = max(60, int(BASE["health"]  * BOSS_SCALE * shape["health"]))
+		card.speed   = max(4,  int(BASE["speed"]   * BOSS_SCALE * shape["speed"]))
+
+		Leveling.apply(card)
+		out.append(card)
+
+	return out
+
+
 static func _build(tier: Dictionary, floor_number: int, slot: int, scale: float, is_boss: bool) -> CardData:
 	var names: Array = tier["names"]
 	var roles: Array = tier["roles"]

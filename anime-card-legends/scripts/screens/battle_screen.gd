@@ -33,6 +33,10 @@ func screen_title() -> String:
 				wave + 1, Gauntlet.WAVES, Gauntlet.wave_name(wave)]
 		"duel":
 			return "The Boy — undefeated"
+		"duel_dark":
+			return "The Boy, Dark — what he could have been"
+		"duel_boss":
+			return "The Boss — guards the Rocket Arena"
 	return "%s — %s" % [
 		Campaign.zone_name_for_floor(floor_number),
 		Campaign.stage_label(floor_number),
@@ -42,7 +46,7 @@ func back_route() -> String:
 	match mode:
 		"raid":
 			return Routes.CLAN
-		"gauntlet", "duel":
+		"gauntlet", "duel", "duel_dark", "duel_boss":
 			return Routes.LOBBY
 	# A stage fight belongs to its zone, whichever hub the player came
 	# in from.
@@ -130,6 +134,10 @@ func _start() -> void:
 			opposition = EnemyFactory.build_gauntlet_wave(wave)
 		"duel":
 			opposition = EnemyFactory.build_boy_deck()
+		"duel_dark":
+			opposition = EnemyFactory.build_boy_dark_deck()
+		"duel_boss":
+			opposition = EnemyFactory.build_boss_deck()
 		_:
 			opposition = EnemyFactory.build_floor(floor_number, GameState.progression)
 	# The team is assembled AGAINST someone. A card that holds a grudge
@@ -218,6 +226,12 @@ func _ledger_context() -> Dictionary:
 		"duel":
 			context["zone"] = "the city"
 			context["boss"] = "the Boy"
+		"duel_dark":
+			context["zone"] = "the city"
+			context["boss"] = "the Boy, Dark"
+		"duel_boss":
+			context["zone"] = "the city"
+			context["boss"] = "the Boss"
 		_:
 			context["floor"] = floor_number
 			context["zone"] = Campaign.zone_name_for_floor(floor_number)
@@ -366,6 +380,10 @@ func _on_ended(player_won: bool) -> void:
 			rewards = _finish_gauntlet(player_won)
 		"duel":
 			rewards = _finish_duel(player_won)
+		"duel_dark":
+			rewards = _finish_duel_dark(player_won)
+		"duel_boss":
+			rewards = _finish_duel_boss(player_won)
 		_:
 			if player_won:
 				rewards = GameState.clear_floor(floor_number)
@@ -431,6 +449,50 @@ func _finish_duel(player_won: bool) -> Dictionary:
 	}
 	# Beating him the first time is the achievement; after that he is a
 	# repeatable, and pays a third.
+	if not first_time:
+		rewards["gems"] = int(rewards["gems"]) / 3
+		rewards["gold"] = int(rewards["gold"]) / 3
+
+	_bank(rewards)
+	return rewards
+
+
+func _finish_duel_dark(player_won: bool) -> Dictionary:
+	if not player_won:
+		Audio.play("defeat")
+		return {}
+
+	Audio.play("victory")
+	var first_time := not GameState.progression.boy_dark_defeated
+	GameState.progression.boy_dark_defeated = true
+
+	var rewards := {
+		"gems": Npcs.BOY_DARK_REWARD_GEMS,
+		"gold": Npcs.BOY_DARK_REWARD_GOLD,
+		"pack": "",
+	}
+	if not first_time:
+		rewards["gems"] = int(rewards["gems"]) / 3
+		rewards["gold"] = int(rewards["gold"]) / 3
+
+	_bank(rewards)
+	return rewards
+
+
+func _finish_duel_boss(player_won: bool) -> Dictionary:
+	if not player_won:
+		Audio.play("defeat")
+		return {}
+
+	Audio.play("victory")
+	var first_time := not GameState.progression.boss_defeated
+	GameState.progression.boss_defeated = true
+
+	var rewards := {
+		"gems": Npcs.BOSS_REWARD_GEMS,
+		"gold": Npcs.BOSS_REWARD_GOLD,
+		"pack": "",
+	}
 	if not first_time:
 		rewards["gems"] = int(rewards["gems"]) / 3
 		rewards["gold"] = int(rewards["gold"]) / 3
@@ -547,9 +609,22 @@ func _duel_result(body: VBoxContainer, player_won: bool, rewards: Dictionary) ->
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 
-	var line := Npcs.pick(Npcs.BOY_WIN, rng)
+	var win_lines := Npcs.BOY_WIN
+	var loss_lines := Npcs.BOY_LOSS
+	var requeue := GameState.progression.queue_duel
+	match mode:
+		"duel_dark":
+			win_lines = Npcs.BOY_DARK_WIN
+			loss_lines = Npcs.BOY_DARK_LOSS
+			requeue = GameState.progression.queue_duel_dark
+		"duel_boss":
+			win_lines = Npcs.BOSS_WIN
+			loss_lines = Npcs.BOSS_LOSS
+			requeue = GameState.progression.queue_duel_boss
+
+	var line := Npcs.pick(win_lines, rng)
 	if player_won:
-		line = Npcs.pick(Npcs.BOY_LOSS, rng)
+		line = Npcs.pick(loss_lines, rng)
 	body.add_child(UI.label("\"%s\"" % line, Design.FS_BODY,
 		Design.TEXT_DIM, HORIZONTAL_ALIGNMENT_CENTER))
 
@@ -562,7 +637,7 @@ func _duel_result(body: VBoxContainer, player_won: bool, rewards: Dictionary) ->
 		func(): Routes.go(self, Routes.LOBBY), Vector2(200, 48)))
 	if not player_won:
 		actions.add_child(UI.button("Again", func():
-			GameState.progression.queue_duel()
+			requeue.call()
 			get_tree().reload_current_scene()
 		, Vector2(130, 48)))
 	body.add_child(actions)
@@ -628,7 +703,7 @@ func _show_result(player_won: bool, rewards: Dictionary) -> void:
 		_gauntlet_result(body, player_won, rewards)
 		return
 
-	if mode == "duel":
+	if mode == "duel" or mode == "duel_dark" or mode == "duel_boss":
 		_duel_result(body, player_won, rewards)
 		return
 
