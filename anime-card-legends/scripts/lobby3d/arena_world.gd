@@ -28,14 +28,16 @@ const GOAL_HEIGHT := GOAL_HEIGHT_UU * CarBody.UU
 const GOAL_DEPTH := GOAL_DEPTH_UU * CarBody.UU
 
 # --- The stadium model --------------------------------------------------
-# How far the bowl sits back from the ends of the pitch, and then the
-# straight 2x on top of it. One number to turn if it wants to be closer
-# in or further out.
+# How far the bowl sits back from the ends of the pitch. One number to
+# turn if it wants to be closer in or further out.
 const STADIUM_MARGIN := 1.2
-# Was 2.0. Ten per cent off: the bowl was reaching past the arena shell,
-# so the part of the stadium you could see extended beyond anything you
-# could drive on.
-const STADIUM_SCALE := 1.8
+# Was 2.0, then 1.8: at either the bowl swallowed the pitch whole - a
+# stadium 2x+ the pitch's own length, with the playable field reading as
+# a speck in the middle of it. Measured against a fixed frame (not one
+# that backs off with the model, which hid the difference) 1.0 is the
+# model at MARGIN's plain footprint: a stadium that wraps the pitch with
+# room for the stands and nothing left over.
+const STADIUM_SCALE := 1.0
 
 const MATCH_SECONDS := 300.0
 const KICKOFF_PAUSE := 2.0
