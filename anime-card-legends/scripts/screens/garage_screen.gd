@@ -24,6 +24,7 @@ var _passenger_label: Label
 var _passenger_row: HBoxContainer
 var _momentum: ProgressBar
 var _turntable: Node3D
+var _car_model: Node3D
 var _preview_host: SubViewport
 var _name_label: Label
 var _count_label: Label
@@ -230,9 +231,15 @@ func _show_car(model_name: String) -> void:
 	if _turntable == null:
 		return
 
-	for child in _turntable.get_children():
-		if child.name == "Car":
-			child.queue_free()
+	# By REFERENCE, not by name. queue_free() does not take effect until
+	# the end of the frame, so stepping the arrows twice before that lands
+	# used to add a second "Car" node while the first still existed - Godot
+	# auto-uniquifies the name to "Car2" to avoid the clash, which meant
+	# the old one was never matched (and never freed) on the next call
+	# either. That is what left every previous choice on screen at once.
+	if _car_model != null and is_instance_valid(_car_model):
+		_car_model.queue_free()
+		_car_model = null
 
 	var model := Cars.spawn(model_name)
 	if model == null:
@@ -240,6 +247,7 @@ func _show_car(model_name: String) -> void:
 	model.name = "Car"
 	_turntable.add_child(model)
 	Models.fit_length(model, CAR_LENGTH)
+	_car_model = model
 
 
 func _process(delta: float) -> void:

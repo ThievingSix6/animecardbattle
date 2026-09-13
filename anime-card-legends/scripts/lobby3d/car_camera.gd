@@ -114,12 +114,15 @@ func _apply_settings() -> void:
 		_camera.fov = Settings.camera_value("fov")
 
 
+# Backed off by the car's own display_scale, or a car shown 5x up (the
+# city's one parked car) fills the whole frame at a distance tuned for a
+# real 2.7 m hatchback.
 func _distance() -> float:
-	return Settings.camera_value("distance") * CarBody.UU
+	return Settings.camera_value("distance") * CarBody.UU * target.display_scale
 
 
 func _height() -> float:
-	return Settings.camera_value("height") * CarBody.UU
+	return Settings.camera_value("height") * CarBody.UU * target.display_scale
 
 
 # RL's Angle is a downward tilt in degrees, on top of whatever the
@@ -242,7 +245,8 @@ func _physics_process(delta: float) -> void:
 	# Aimed ahead of the car, so there is road on screen at speed rather
 	# than just bumper. On ball cam it is aimed at the ball instead, so
 	# the car and the ball are both in frame.
-	var aim := target.global_position + _smoothed * LOOK_AHEAD + Vector3.UP * AIM_HEIGHT
+	var aim := target.global_position + _smoothed * LOOK_AHEAD * target.display_scale \
+		+ Vector3.UP * AIM_HEIGHT * target.display_scale
 	if _ball_cam and is_instance_valid(ball):
 		aim = ball.global_position
 	_camera.look_at(aim, Vector3.UP)

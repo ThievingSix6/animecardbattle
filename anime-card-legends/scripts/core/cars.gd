@@ -25,6 +25,18 @@ extends RefCounted
 const FOLDER := "cars"
 const LEGACY := "car"
 
+# facing_yaw() only resolves the 90-degree ambiguity (which horizontal axis
+# is the length) - it has no way to tell which END of that axis the nose is
+# on, so a model whose front happens to point +Z/+X instead of -Z/-X drives
+# in reverse: the wheels spin the way the pedal says, the car just goes the
+# other way. Caught by eye, not measurable from the mesh, so it is named
+# here rather than guessed at. Add a model here if a new one turns up
+# driving backwards.
+const FACING_OVERRIDES := {
+	FOLDER + "/The_Riviera": PI,
+	FOLDER + "/Velocity_GT": PI,
+}
+
 
 # Every car, in a stable order, as model names ready for
 # Models.spawn_prop(). The legacy single car leads if it is still there.
@@ -100,5 +112,5 @@ static func spawn(model_name: String) -> Node3D:
 	var model := Models.spawn_prop(model_name)
 	if model == null:
 		return null
-	Models.spin(model, facing_yaw(model))
+	Models.spin(model, facing_yaw(model) + float(FACING_OVERRIDES.get(model_name, 0.0)))
 	return model

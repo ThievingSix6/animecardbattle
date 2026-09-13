@@ -99,14 +99,24 @@ const WHEEL_NAMES: Array[String] = ["FrontLeft", "FrontRight", "RearLeft", "Rear
 # anywhere a car has no team - the city, the garage preview - so nothing
 # there looks tinted for no reason.
 var team_color := Color.WHITE
+
+# Cosmetic-only blow-up of the shown model, applied AFTER fit_length() so
+# the collider, the suspension and the wheel raycasts - all sized off
+# CAR_LENGTH - never move. The city sets this on its one car because a
+# realistic 2.7 m hatchback reads as a toy beside its buildings; the arena
+# leaves it at 1.0 because the pitch, the ball and the goals are all
+# scaled to the real car. Scaled about the model's own wheel-height origin,
+# so the wheels stay planted and only the body grows around them.
+var display_scale := 1.0
 # How strongly the team colour washes the car's own paint. Low enough
 # that the model's own livery still reads; high enough that blue and
 # orange are unmistakable from across the pitch.
 const TEAM_TINT_STRENGTH := 0.4
 
 @export_group("Driving")
-@export var max_speed_uu := 2300.0
-@export var max_speed_no_boost_uu := 1410.0
+# Both ceilings, 35% down from Rocket League's own 2300 / 1410.
+@export var max_speed_uu := 1495.0
+@export var max_speed_no_boost_uu := 916.5
 # Throttle acceleration falls off with speed: full push from a
 # standstill, nothing left at the no-boost ceiling.
 @export var forward_acceleration_uu := 1600.0
@@ -367,8 +377,11 @@ func _build_shell() -> void:
 		_shell.add_child(holder)
 		holder.add_child(model)
 
-		# Uniform, so an imported car is never stretched.
-		Models.fit_length(holder, CAR_LENGTH)
+		# Uniform, so an imported car is never stretched. display_scale only
+		# stretches the TARGET this fits to, so the model's own proportions
+		# and its seating on the ground stay exactly as fit_length always
+		# worked them out - the collider below is still real CAR_LENGTH.
+		Models.fit_length(holder, CAR_LENGTH * display_scale)
 		# The model is seated on y = 0; its wheels belong on the ground,
 		# which is RIDE_HEIGHT below the body's origin.
 		holder.position.y -= RIDE_HEIGHT

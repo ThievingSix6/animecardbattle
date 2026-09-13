@@ -1389,6 +1389,11 @@ func _build_car() -> void:
 	# Parked on the plaza's edge, clear of the portal and the shopfronts.
 	car.position = Vector3(26.0, CarBody.RIDE_HEIGHT + 0.5, 34.0)
 	car.rotation.y = PI
+	# A real hatchback's 2.7 m reads as a toy next to the city's buildings
+	# and its own person-height NPCs, so the one car parked here is shown
+	# 5x up. Cosmetic only - set before _ready() so _build_shell() picks
+	# it up; the collider and the driving physics never see this number.
+	car.display_scale = 5.0
 	add_child(car)
 
 	car_camera = CarCamera.create(car)
