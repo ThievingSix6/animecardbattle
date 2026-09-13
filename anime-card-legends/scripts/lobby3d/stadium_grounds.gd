@@ -4,10 +4,10 @@ extends Node3D
 # =========================================================
 # THE ROAD OUT TO THE STADIUM.
 #
-# A causeway leaves the city through a gap in the mountain ring, runs
-# out across the plain, and ends at the stadium: searchlights raking
-# the sky, fireworks over the roof, and a forest either side of the
-# approach.
+# An underground tunnel leaves the city through the gap in its own wall,
+# dips below the plain and runs under the mountain ring, then climbs
+# back into the open at the stadium: searchlights raking the sky,
+# fireworks over the roof, and a forest either side of the approach.
 #
 # The stadium itself is a landmark you drive up to and a marker you
 # step onto - the match is played inside res://scenes/Arena.tscn, so
@@ -27,6 +27,31 @@ extends Node3D
 const CAUSEWAY_LENGTH := 2.6
 const CAUSEWAY_WIDTH := 0.18
 const GROUNDS_RADIUS := 0.95
+
+# The tunnel: how much clear height it gives a car, and how much of its
+# own length is spent climbing or descending rather than running flat.
+# Both ramps start OUTSIDE the city's own ground collider - a plain 24 m
+# -thick slab under the whole district - or the tunnel would be carved
+# into solid rock nobody could ever reach.
+const TUNNEL_CLEARANCE := 7.5
+const TUNNEL_RAMP_FRACTION := 0.16
+const TUNNEL_FLOOR_THICKNESS := 1.0
+const TUNNEL_WALL_THICKNESS := 1.0
+const TUNNEL_LIGHTS := 10
+# Extra clearance below Horizon's own flattened plain, which the tunnel
+# has to run entirely under.
+const TUNNEL_BURIAL_MARGIN := 6.0
+
+
+# How far below street level the floor sits. Horizon's plain is flattened
+# along the causeway's corridor, but flattened to ITS OWN base height -
+# city_half * 0.02 + 1.0 below zero, not to y = 0 the way the district's
+# own ground is - so a tunnel dug against world zero would have its
+# ceiling poking straight through the ground above it. Matches
+# Horizon._plain_base exactly, plus the tunnel's own height and a margin.
+func _tunnel_depth() -> float:
+	var plain_base := city_half * 0.02 + 1.0
+	return plain_base + TUNNEL_CLEARANCE + TUNNEL_FLOOR_THICKNESS * 2.0 + TUNNEL_BURIAL_MARGIN
 
 # The stadium's long axis, in multiples of the city's half-width, and
 # then the straight 2x on top. One number to turn if it wants to be
@@ -90,43 +115,77 @@ func interaction_radius() -> float:
 	return MARKER_RADIUS
 
 
-# --- The road out ------------------------------------------------------
+# --- The road out : an underground tunnel -------------------------------
+#
+# Three straight boxes rather than one displaced mesh - a floor tilted to
+# a ramp's own angle is the entire trick, and a tunnel only needs two of
+# them either side of a flat run under the mountains. Each box carries a
+# floor, a ceiling and two walls, hollow between them, so the car and the
+# player pass THROUGH rather than the tunnel being a solid slab with
+# scenery painted on it.
+var _tunnel_points: Array[Vector3] = []
 
-# A raised causeway from the city's edge to the grounds. It is solid,
-# so it can be driven; everything either side of it is not.
 func _build_causeway(centre: Vector3) -> void:
-	var from := heading * city_half * 0.9
+	# Starting AT the city's wall, not inside it: the ground under the
+	# district itself is one solid 24 m-thick collider, and a ramp that
+	# started underneath it would be carved into solid rock with no way
+	# down into it.
+	var from := heading * city_half
 	var to := centre
-	var length := from.distance_to(to)
 	var width := city_half * CAUSEWAY_WIDTH
 
+	var total := from.distance_to(to)
+	var ramp_length := total * TUNNEL_RAMP_FRACTION
+	var depth := _tunnel_depth()
+	var down_end := from + heading * ramp_length + Vector3.DOWN * depth
+	var up_start := to - heading * ramp_length + Vector3.DOWN * depth
+
+	_tunnel_points = [from, down_end, up_start, to]
+
+	_build_tunnel_segment(from, down_end, width)
+	_build_tunnel_segment(down_end, up_start, width)
+	_build_tunnel_segment(up_start, to, width)
+
+	_build_tunnel_lights(width)
+
+
+# One straight run of tunnel between two floor-surface points. Tilted to
+# whatever slope `start` to `end` actually is, so the same function
+# builds both ramps and the flat middle.
+func _build_tunnel_segment(start: Vector3, end: Vector3, width: float) -> void:
+	var direction := end - start
+	var length := direction.length()
+	if length <= 0.01:
+		return
+
 	var body := StaticBody3D.new()
-	body.position = (from + to) * 0.5
-	body.rotation.y = atan2(heading.x, heading.z)
+	body.transform = Transform3D(Basis.looking_at(direction.normalized(), Vector3.UP), (start + end) * 0.5)
 	add_child(body)
 
-	var deck := MeshInstance3D.new()
-	var slab := BoxMesh.new()
-	slab.size = Vector3(width, 2.0, length)
-	deck.mesh = slab
-	deck.position.y = -1.0
-	deck.material_override = Textures.road(length, Color("#151a28"))
-	body.add_child(deck)
+	var floor_mat := Textures.road(length, Color("#10131e"))
+	var rock_mat := Textures.rock(length, Color("#1c2233"))
 
-	var shape := CollisionShape3D.new()
-	var collider := BoxShape3D.new()
-	collider.size = Vector3(width, 2.0, length)
-	shape.shape = collider
-	shape.position.y = -1.0
-	body.add_child(shape)
+	# Floor: top face at the segment's own y = 0, which is the surface a
+	# car actually drives on.
+	_tunnel_slab(body, Vector3(width, TUNNEL_FLOOR_THICKNESS, length),
+		Vector3(0.0, -TUNNEL_FLOOR_THICKNESS * 0.5, 0.0), floor_mat)
+	# Ceiling, TUNNEL_CLEARANCE above the floor.
+	_tunnel_slab(body, Vector3(width, TUNNEL_FLOOR_THICKNESS, length),
+		Vector3(0.0, TUNNEL_CLEARANCE + TUNNEL_FLOOR_THICKNESS * 0.5, 0.0), rock_mat)
+	# Both walls, spanning floor to ceiling.
+	var wall_x := width * 0.5 + TUNNEL_WALL_THICKNESS * 0.5
+	_tunnel_slab(body, Vector3(TUNNEL_WALL_THICKNESS, TUNNEL_CLEARANCE, length),
+		Vector3(-wall_x, TUNNEL_CLEARANCE * 0.5, 0.0), rock_mat)
+	_tunnel_slab(body, Vector3(TUNNEL_WALL_THICKNESS, TUNNEL_CLEARANCE, length),
+		Vector3(wall_x, TUNNEL_CLEARANCE * 0.5, 0.0), rock_mat)
 
-	# A lit line down the middle, so at night it reads as a road rather
-	# than a strip of ground.
+	# A lit line down the middle of the floor, so at night it still reads
+	# as a road rather than a strip of ground.
 	var line := MeshInstance3D.new()
 	var stripe := BoxMesh.new()
-	stripe.size = Vector3(0.8, 0.1, length)
+	stripe.size = Vector3(0.8, 0.06, length)
 	line.mesh = stripe
-	line.position.y = 0.06
+	line.position = Vector3(0.0, 0.04, 0.0)
 
 	var line_mat := StandardMaterial3D.new()
 	line_mat.albedo_color = Color("#ff6b35")
@@ -136,17 +195,62 @@ func _build_causeway(centre: Vector3) -> void:
 	line.material_override = line_mat
 	body.add_child(line)
 
-	# Lamps down the causeway, so it is followable in the dark.
-	var lamps := 6
-	for i in lamps:
-		var t := (float(i) + 0.5) / float(lamps)
-		var at := from.lerp(to, t)
+
+func _tunnel_slab(body: StaticBody3D, size: Vector3, offset: Vector3, material: Material) -> void:
+	var mesh := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = size
+	mesh.mesh = box
+	mesh.position = offset
+	mesh.material_override = material
+	body.add_child(mesh)
+
+	var shape := CollisionShape3D.new()
+	var collider := BoxShape3D.new()
+	collider.size = size
+	shape.shape = collider
+	shape.position = offset
+	body.add_child(shape)
+
+
+# Ceiling-mounted rather than floating overhead the way the old surface
+# causeway's lamps did - there is a roof six feet up now to hang them
+# from. Spaced across all three segments by distance, not by segment, so
+# the ramps are not left darker than the flat run just for being shorter.
+func _build_tunnel_lights(width: float) -> void:
+	var lengths: Array[float] = []
+	var total := 0.0
+	for i in _tunnel_points.size() - 1:
+		var d := _tunnel_points[i].distance_to(_tunnel_points[i + 1])
+		lengths.append(d)
+		total += d
+	if total <= 0.01:
+		return
+
+	for i in TUNNEL_LIGHTS:
+		var target := (float(i) + 0.5) / float(TUNNEL_LIGHTS) * total
+		var at := _tunnel_point_at(lengths, target)
+
 		var lamp := OmniLight3D.new()
-		lamp.position = at + Vector3(0.0, 9.0, 0.0)
+		lamp.position = at + Vector3(0.0, TUNNEL_CLEARANCE * 0.82, 0.0)
 		lamp.light_color = Color("#ff9f6b")
 		lamp.light_energy = RenderMode.light(1.1)
 		lamp.omni_range = width * 2.2
 		add_child(lamp)
+
+
+# Walks the three-point tunnel path `target` metres in and returns the
+# floor position there, straight-line interpolating within whichever
+# segment it falls in.
+func _tunnel_point_at(lengths: Array[float], target: float) -> Vector3:
+	var walked := 0.0
+	for i in lengths.size():
+		var seg_length: float = lengths[i]
+		if target <= walked + seg_length or i == lengths.size() - 1:
+			var t := 0.0 if seg_length <= 0.01 else clampf((target - walked) / seg_length, 0.0, 1.0)
+			return _tunnel_points[i].lerp(_tunnel_points[i + 1], t)
+		walked += seg_length
+	return _tunnel_points[_tunnel_points.size() - 1]
 
 
 # The clearing the stadium stands in.

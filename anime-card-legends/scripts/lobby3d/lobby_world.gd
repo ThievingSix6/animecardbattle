@@ -82,6 +82,37 @@ const TOWER_CHANCE := 0.09
 const TOWER_HEIGHT_MIN := 44.0
 const TOWER_HEIGHT_MAX := 78.0
 
+# A curtain wall of towers hard against the district's own edge, so the
+# city reads as ENCLOSED on every side rather than fading out into open
+# mountains past a wall nobody can see. Drawn through the same skyline
+# pool as the interior blocks - it is still filler, just tall filler
+# planted at the boundary instead of dealt out across the lots - so it
+# costs nothing extra beyond the placements themselves. Left open only
+# where the causeway needs to pass, matching the wall's own gate.
+const ENCLOSURE_PITCH := 34.0
+const ENCLOSURE_DEPTH := 22.0
+const ENCLOSURE_INSET := ENCLOSURE_DEPTH * 0.5 + 2.0
+const ENCLOSURE_HEIGHT_MIN := 70.0
+const ENCLOSURE_HEIGHT_MAX := 150.0
+
+# Specific, hand-picked buildings rather than the generic skyline pool -
+# res://art/models/props/landmarks/<model>.glb. Each is placed with
+# fit_span(), the same UNIFORM, proportion-preserving fit the house and
+# the stadium already use, never fit_box()'s independent width/height
+# stretch: what shows up in the city is exactly what was authored, just
+# scaled to fit its footprint. Addressed by block/lot so they land
+# exactly on the grid _plan_skyline() already lays out; those lots (and,
+# for a model bigger than one lot, that whole block) are pulled from the
+# procedural pass in _plan_skyline() so nothing generates on top of them.
+const LANDMARK_BLOCK := Vector2i(-2, 2)
+const LANDMARK_STREET_BLOCK := Vector2i(-1, 2)
+const LANDMARKS: Array[Dictionary] = [
+	{"model": "landmarks/japan_house_a", "span": 22.0, "block": Vector2i(-2, 2), "lot": Vector2i(0, 0), "spin": PI * 0.25},
+	{"model": "landmarks/japan_house_b", "span": 20.0, "block": Vector2i(-2, 2), "lot": Vector2i(1, 0), "spin": -PI * 0.15},
+	{"model": "landmarks/corner_store",  "span": 13.0, "block": Vector2i(-2, 2), "lot": Vector2i(0, 1), "spin": PI * 0.5},
+	{"model": "landmarks/japan_street",  "span": 46.0, "block": Vector2i(-1, 2), "lot": Vector2i(0, 0), "spin": 0.0, "whole_block": true},
+]
+
 # The open square in the middle: portal, NPCs, and the destinations
 # around its edge.
 const PLAZA_RADIUS := 42.0
@@ -188,6 +219,7 @@ func _ready() -> void:
 	_build_ground()
 	_build_streets()
 	_build_skyline()
+	_build_named_buildings()
 	_build_storefronts()
 	_build_landmark()
 	_build_parks()
@@ -749,17 +781,19 @@ func _build_skyline_pool(pool: Array[String], placements: Array[Dictionary]) -> 
 # empty, and the plaza and storefront ring kept clear.
 func _plan_skyline() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var reserved: Array[Vector2i] = [LANDMARK_BLOCK, LANDMARK_STREET_BLOCK]
 
 	for gx in range(-BLOCKS_OUT, BLOCKS_OUT + 1):
 		for gz in range(-BLOCKS_OUT, BLOCKS_OUT + 1):
+			# A specific model goes on this block instead - see LANDMARKS.
+			if reserved.has(Vector2i(gx, gz)):
+				continue
+
 			var block := Vector3(float(gx) * BLOCK_PITCH, 0.0, float(gz) * BLOCK_PITCH)
 
 			for lx in LOTS_PER_BLOCK:
 				for lz in LOTS_PER_BLOCK:
-					var lot := block + Vector3(
-						(float(lx) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE,
-						0.0,
-						(float(lz) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE)
+					var lot := _lot_center(block, lx, lz)
 
 					if Vector2(lot.x, lot.z).length() < STOREFRONT_RING + 26.0:
 						continue
@@ -771,7 +805,50 @@ func _plan_skyline() -> Array[Dictionary]:
 
 					out.append(_plan_building(lot))
 
+	out.append_array(_plan_enclosure_ring())
 	return out
+
+
+func _lot_center(block: Vector3, lx: int, lz: int) -> Vector3:
+	return block + Vector3(
+		(float(lx) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE,
+		0.0,
+		(float(lz) + 0.5 - float(LOTS_PER_BLOCK) * 0.5) * LOT_SIZE)
+
+
+# A ring of tall filler buildings hard against the district's edge on all
+# four sides, so the horizon past the last block is city rather than sky.
+# Gapped only on the side the causeway leaves through, the same test
+# _build_gate_wall() uses for the invisible wall underneath it.
+func _plan_enclosure_ring() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var edge := CITY_HALF - ENCLOSURE_INSET
+	var count := maxi(int(floor((CITY_HALF * 2.0) / ENCLOSURE_PITCH)), 1)
+	var half_gate := STADIUM_GATE_WIDTH * 0.5 + ENCLOSURE_DEPTH
+
+	for i in count:
+		var along := (float(i) + 0.5) / float(count) * CITY_HALF * 2.0 - CITY_HALF
+		var at_gate := absf(along) < half_gate
+
+		if not (at_gate and STADIUM_HEADING.z < 0.0):
+			out.append(_enclosure_building(Vector3(along, 0.0, -edge), 0.0))
+		if not (at_gate and STADIUM_HEADING.z > 0.0):
+			out.append(_enclosure_building(Vector3(along, 0.0, edge), 0.0))
+		if not (at_gate and STADIUM_HEADING.x < 0.0):
+			out.append(_enclosure_building(Vector3(-edge, 0.0, along), PI * 0.5))
+		if not (at_gate and STADIUM_HEADING.x > 0.0):
+			out.append(_enclosure_building(Vector3(edge, 0.0, along), PI * 0.5))
+
+	return out
+
+
+func _enclosure_building(at: Vector3, spin: float) -> Dictionary:
+	return {
+		"pos": at,
+		"width": ENCLOSURE_DEPTH * _rng.randf_range(0.85, 1.05),
+		"height": _rng.randf_range(ENCLOSURE_HEIGHT_MIN, ENCLOSURE_HEIGHT_MAX),
+		"spin": spin,
+	}
 
 
 func _plan_building(lot: Vector3) -> Dictionary:
@@ -932,6 +1009,47 @@ func _build_house() -> void:
 		"pad": pad,
 		"base_color": tint,
 	})
+
+
+# --- Named landmarks (hand-picked models, never stretched) -------------
+#
+# res://art/models/props/landmarks/<model>.glb - specific buildings dropped
+# in whole, at the block LANDMARKS points them to, sized only by fit_span()
+# so their own proportions are what shows up in the city.
+
+func _build_named_buildings() -> void:
+	for entry in LANDMARKS:
+		_place_landmark(entry)
+
+
+func _place_landmark(entry: Dictionary) -> void:
+	var model_id := str(entry["model"])
+	var model := Models.spawn_prop(model_id)
+	if model == null:
+		return
+
+	var block_grid: Vector2i = entry["block"]
+	var block := Vector3(
+		float(block_grid.x) * BLOCK_PITCH, 0.0, float(block_grid.y) * BLOCK_PITCH)
+
+	var at := block
+	if not bool(entry.get("whole_block", false)):
+		var lot: Vector2i = entry["lot"]
+		at = _lot_center(block, lot.x, lot.y)
+
+	var root := Node3D.new()
+	root.position = at
+	root.rotation.y = float(entry["spin"])
+	add_child(root)
+	root.add_child(model)
+
+	# fit_span, not fit_box: these are specific models, picked for what
+	# they look like - stretching one to a lot's footprint is exactly
+	# what the skyline pool does and exactly what these should not do.
+	var size := Models.fit_span(model, float(entry["span"]))
+	if size == Vector3.ZERO:
+		return
+	_add_box_collider(root, Vector3(size.x, maxf(size.y, 1.0), size.z))
 
 
 func _build_storefront(destination: Dictionary, at: Vector3, height: float) -> Node3D:
